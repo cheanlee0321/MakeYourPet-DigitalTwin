@@ -3,6 +3,14 @@
 ### (數位孿生與 AI 強化學習步態控制系統)
 
 <p align="center">
+  <img src="demo_locomotion.gif" alt="Make Your Pet Autonomous Locomotion Demo" width="85%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+</p>
+<p align="center">
+  <em>Autonomous Blind Locomotion across 3D Terrain in MuJoCo Physics Digital Twin</em><br>
+  <sub>Full video recording: <a href="Demo%20Recording%202026-09-27.mp4">Demo Recording 2026-09-27.mp4</a> (1m 15s)</sub>
+</p>
+
+<p align="center">
   <img src="Demo1.png" alt="Demo 1 — Hexapod Digital Twin Perspective View" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
   &nbsp;
   <img src="Demo2.png" alt="Demo 2 — Hexapod Digital Twin Front View" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
@@ -20,7 +28,7 @@
 
 ---
 
-## 📖 Overview
+## Overview
 
 This project builds a high-fidelity **Digital Twin** of an 18-DOF hexapod robot inside the **MuJoCo** physics engine, based on the open-source hardware project [MakeYourPet/hexapod](https://github.com/MakeYourPet/hexapod).
 
@@ -30,33 +38,33 @@ The trained policy is extracted and exported as a lightweight **1.9 KB** static 
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-* **🦾 18-DOF Physics-Accurate Digital Twin**:
+* **18-DOF Physics-Accurate Digital Twin**:
   * Precisely replicates the original 18-servo linkage geometry, mass-inertia distribution (total weight 1.5 kg), and rubber foot friction.
   * Resolves all 6 coordinate system conflicts when importing FreeCAD STL meshes into MuJoCo (axis flips, mirrored armor, hinge offset compensation).
   * Uses a decoupled "Visual Layer (Group 1)" and "Physics Collision Layer (Group 3)" architecture with zero interpenetration and high throughput.
-* **🧠 Residual Reinforcement Learning Architecture**:
+* **Residual Reinforcement Learning Architecture**:
   * Implements Boston Dynamics / ETH ANYmal benchmark architecture: $\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \Delta \mathbf{q}_{\text{RL}}(s)$.
   * Eliminates the local-optima deadzone where pure RL tends to freeze all legs, achieving convergence tens of times faster (breaching 8,480+ score in ~1 minute).
-* **⏱️ CPG Gait Phase Clock & 67-Dimensional Observation Space**:
+* **CPG Gait Phase Clock & 67-Dimensional Observation Space**:
   * Injects tripod gait phase clock $[\sin\phi, \cos\phi]$ into the observation space for a robust 1.5 Hz walking rhythm.
   * Supports omnidirectional dynamic commands $[v_x, v_y, \omega_z]$; clock instantly freezes to zero on brake, achieving "hold to walk, release to stop".
-* **🏔️ 3D Heightfield Terrain & Zero-Shot Blind Walking**:
+* **3D Heightfield Terrain & Zero-Shot Blind Walking**:
   * Supports 6 dynamic 3D terrains: `flat`, `blocks`, `bumps`, `rough`, `slope`, and `park`.
   * Achieves 100% blind-walking survival under $\pm 4.0\text{ cm}$ obstacles using only proprioception and active compliance, without vision or radar.
-* **🎮 Game-Grade Real-Time 3D Remote Control (`demo.py`)**:
+* **Game-Grade Real-Time 3D Remote Control (`demo.py`)**:
   * Independent Windows API key listener, 100% conflict-free with MuJoCo native hotkeys.
   * Supports 4-gear transmission (ECO, NORMAL, SPORT, TURBO), Shift sprint, auto-tracking camera, and mouse force disturbance testing.
-* **🚀 Ultra-Fast Training & Lightweight Edge Export**:
+* **Ultra-Fast Training & Lightweight Edge Export**:
   * 12-parallel-process multi-core sampling at **1,800 ~ 3,800+ SPS** (76x real-time speedup).
   * One-command export of the trained policy as a **1.9 KB** ONNX model with closed-loop ONNX Runtime verification.
-* **🎬 Blender 5.2 Cinematic Automated Rendering Pipeline**:
+* **Blender 5.2 Cinematic Automated Rendering Pipeline**:
   * 50 FPS 6DoF trajectory recording, automatic PBR metallic armor, matte black alloy, dynamic 3-point tracking lighting, and depth-of-field tracking camera.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```mermaid
 flowchart TD
@@ -93,7 +101,7 @@ flowchart TD
 
 ---
 
-## 📐 Robot Link Specifications
+## Robot Link Specifications
 
 | Link Name | Joint Node | Link Length | Rotation Axis | Design Angle |
 | :--- | :--- | :---: | :---: | :---: |
@@ -106,7 +114,7 @@ flowchart TD
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 * OS: Windows 10 / 11 (64-bit)
@@ -127,7 +135,7 @@ pip install mujoco gymnasium stable-baselines3 onnx onnxruntime trimesh scipy nu
 
 ---
 
-## 🎮 Real-Time 3D Remote Control (`demo.py`)
+## Real-Time 3D Remote Control (`demo.py`)
 
 Run `demo.py` to open the smooth 3D workstation built on MuJoCo's native Passive Viewer:
 
@@ -159,7 +167,7 @@ python demo.py --terrain flat
 
 ---
 
-## 🏋️ Reinforcement Learning Training Pipeline (`train.py`)
+## Reinforcement Learning Training Pipeline (`train.py`)
 
 One-command launch with multi-process parallel training, built-in domain randomization and evaluation-based checkpointing:
 
@@ -194,7 +202,7 @@ python verify_command_tracking.py
 
 ---
 
-## 📦 Edge ONNX Export (`export_onnx.py`)
+## Edge ONNX Export (`export_onnx.py`)
 
 Export the trained PyTorch policy to a static-graph ONNX model:
 
@@ -209,7 +217,7 @@ python export_onnx.py --output models/hexapod_policy.onnx
 
 ---
 
-## 🎬 Blender Cinematic Pipeline
+## Blender Cinematic Pipeline
 
 Complete pipeline from MuJoCo pose export to Blender 5.2 automated lighting, texturing, and dynamic camera:
 
@@ -226,7 +234,7 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 Make Your Pet - Digital Twin/
@@ -260,7 +268,7 @@ Make Your Pet - Digital Twin/
 
 ---
 
-## 📚 References
+## References
 
 1. **Hardware Open-Source Repository**: [MakeYourPet / hexapod (GitHub)](https://github.com/MakeYourPet/hexapod)
 2. **Physics Simulation Engine**: [MuJoCo: Multi-Joint dynamics with Contact](https://mujoco.org/)
@@ -273,19 +281,27 @@ Make Your Pet - Digital Twin/
 
 ---
 
-## 📄 License
+## License
 
 Project code and model configurations are open-sourced under the **Apache License 2.0**.  
 3D models and geometric parts are copyright of the [MakeYourPet](https://github.com/MakeYourPet/hexapod) official open-source project.
 
 ---
 
-> 🌏 **中文版說明請見下方 | Chinese version below**
+> **中文版說明請見下方 | Chinese version below**
 
 ---
 
 # Make Your Pet - 數位孿生與 AI 強化學習步態控制系統
 ### (18-DOF Hexapod Digital Twin & Residual Reinforcement Learning)
+
+<p align="center">
+  <img src="demo_locomotion.gif" alt="Make Your Pet 六足機器人自主步態展示" width="85%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+</p>
+<p align="center">
+  <em>MuJoCo 物理數位孿生體 3D 起伏地形自主盲走即時動態</em><br>
+  <sub>完整操控展示錄影：<a href="Demo%20Recording%202026-09-27.mp4">Demo Recording 2026-09-27.mp4</a> (1分15秒)</sub>
+</p>
 
 <p align="center">
   <img src="Demo1.png" alt="Demo 1 — 六足機器人數位孿生俯仰視角" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
@@ -305,7 +321,7 @@ Project code and model configurations are open-sourced under the **Apache Licens
 
 ---
 
-## 📖 專案簡介 (Overview)
+## 專案簡介 (Overview)
 
 本專案基於開源機器人專案 [MakeYourPet/hexapod](https://github.com/MakeYourPet/hexapod)，在 **MuJoCo** 高效物理引擎中構建 18 自由度（18-DOF）六足機器人的**高擬真數位孿生體（Digital Twin）**。
 
@@ -315,33 +331,33 @@ Project code and model configurations are open-sourced under the **Apache Licens
 
 ---
 
-## ✨ 核心亮點 (Key Features)
+## 核心亮點 (Key Features)
 
-* **🦾 18-DOF 物理真實高擬真數位孿生**：
+* **18-DOF 物理真實高擬真數位孿生**：
   * 精確重現原廠 18 顆伺服舵機連桿幾何、質量慣性分佈（全機總重 1.5 kg）與橡膠足端摩擦力。
   * 徹底解決 FreeCAD STL 原廠網格導入 MuJoCo 的 6 大坐標系衝突（繞軸翻轉、鏡像護甲、鉸接孔位補償）。
   * 採「視覺層 (Group 1)」與「物理碰撞層 (Group 3)」解耦架構，零碰撞穿透且維持高吞吐量。
-* **🧠 殘差強化學習架構（Residual RL）**：
+* **殘差強化學習架構（Residual RL）**：
   * 引入波士頓動力 / ETH ANYmal 業界標竿架構：$\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \Delta \mathbf{q}_{\text{RL}}(s)$。
   * 徹底根除純 RL 容易陷入「六足黏地不敢抬步」的局部最優死區，訓練收斂速度提升數十倍（約 1 分鐘即突破 8,480+ 分）。
-* **⏱️ CPG 步態相位時鐘與 67 維觀測空間**：
+* **CPG 步態相位時鐘與 67 維觀測空間**：
   * 觀測空間注入三角步態相位時鐘 $[\sin\phi, \cos\phi]$，提供 1.5 Hz 穩健行走節奏。
   * 支援全向速度動態指令 $[v_x, v_y, \omega_z]$，煞車時時鐘瞬時歸零凍結，達成「按住前進、放開即停」。
-* **🏔️ 3D 高度場起伏地貌與零樣本盲走**：
+* **3D 高度場起伏地貌與零樣本盲走**：
   * 支援 6 種動態 3D 地形：平地 (`flat`)、階梯石柱 (`blocks`)、連續波浪 (`bumps`)、碎石 (`rough`)、坡道 (`slope`) 與複合越野公園 (`park`)。
   * 在無視覺與雷達感測下，依賴本體感覺與主動柔順避震，在 $\pm 4.0\text{ cm}$ 險阻起伏下達成 100% 盲走存活率。
-* **🎮 電玩級即時 3D 遙控工作台 (`demo.py`)**：
+* **電玩級即時 3D 遙控工作台 (`demo.py`)**：
   * 獨立 Windows API 按鍵監聽，100% 避開 MuJoCo 視圖原生熱鍵衝突。
   * 支援 4 檔無級變速箱（ECO、NORMAL、SPORT、TURBO）、Shift 衝刺、鏡頭自動追隨與滑鼠外力推擠干擾測試。
-* **🚀 極速訓練與輕量化邊緣導出**：
+* **極速訓練與輕量化邊緣導出**：
   * 12 並行進程多核心採樣，單機採樣速度高達 **1,800 ~ 3,800+ SPS**（76x 真實時間加速）。
   * 訓練完成策略一鍵導出為 **1.9 KB** ONNX 模型，包含 ONNX Runtime 完整性閉環驗證。
-* **🎬 Blender 5.2 影視級自動化算圖管線**：
+* **Blender 5.2 影視級自動化算圖管線**：
   * 支援 50 FPS 6DoF 軌跡錄製，自動構建 PBR 金屬裝甲、消光黑合金、動態三點打光與景深跟隨運鏡。
 
 ---
 
-## 🏗️ 系統架構 (System Architecture)
+## 系統架構 (System Architecture)
 
 ```mermaid
 flowchart TD
@@ -378,7 +394,7 @@ flowchart TD
 
 ---
 
-## 📐 機器人連桿規格與坐標定義
+## 機器人連桿規格與坐標定義
 
 | 連桿名稱 | 英文 / 節點 | 連桿長度 | 關節旋轉軸 | 設計基準角度 |
 | :--- | :--- | :---: | :---: | :---: |
@@ -391,7 +407,7 @@ flowchart TD
 
 ---
 
-## 🚀 快速上手 (Quick Start)
+## 快速上手 (Quick Start)
 
 ### 1. 環境需求 (Prerequisites)
 * 作業系統：Windows 10 / 11 (64-bit)
@@ -412,7 +428,7 @@ pip install mujoco gymnasium stable-baselines3 onnx onnxruntime trimesh scipy nu
 
 ---
 
-## 🎮 即時 3D 視覺化與電玩級遙控 (`demo.py`)
+## 即時 3D 視覺化與電玩級遙控 (`demo.py`)
 
 執行 `demo.py` 開啟基於 MuJoCo 原生 Passive Viewer 構建的高流暢 3D 工作台：
 
@@ -444,7 +460,7 @@ python demo.py --terrain flat
 
 ---
 
-## 🏋️ 強化學習訓練管線 (`train.py`)
+## 強化學習訓練管線 (`train.py`)
 
 本專案支援一鍵啟動多進程並行訓練，內建領域隨機化（Domain Randomization）與評估保存機制：
 
@@ -479,7 +495,7 @@ python verify_command_tracking.py
 
 ---
 
-## 📦 邊緣端 ONNX 導出 (`export_onnx.py`)
+## 邊緣端 ONNX 導出 (`export_onnx.py`)
 
 將訓練好的 PyTorch 策略導出為靜態圖 ONNX 模型：
 
@@ -494,7 +510,7 @@ python export_onnx.py --output models/hexapod_policy.onnx
 
 ---
 
-## 🎬 Blender 影視級算圖管線 (Cinematic Pipeline)
+## Blender 影視級算圖管線 (Cinematic Pipeline)
 
 本專案提供從 MuJoCo 姿態導出到 Blender 5.2 自動化打光、上材質與動態運鏡的完整腳本：
 
@@ -511,7 +527,7 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 
 ---
 
-## 📂 專案檔案結構 (Project Structure)
+## 專案檔案結構 (Project Structure)
 
 ```text
 Make Your Pet - Digital Twin/
@@ -545,7 +561,7 @@ Make Your Pet - Digital Twin/
 
 ---
 
-## 📚 延伸閱讀與參考文獻 (References)
+## 延伸閱讀與參考文獻 (References)
 
 1. **硬體開源倉庫**：[MakeYourPet / hexapod (GitHub)](https://github.com/MakeYourPet/hexapod)
 2. **物理模擬引擎**：[MuJoCo: Multi-Joint dynamics with Contact](https://mujoco.org/)
@@ -558,7 +574,7 @@ Make Your Pet - Digital Twin/
 
 ---
 
-## 📄 授權條款 (License)
+## 授權條款 (License)
 
 本專案程式碼與模型配置採用 **Apache License 2.0** 授權開源。  
 3D 模型與幾何零件版權歸屬於 [MakeYourPet](https://github.com/MakeYourPet/hexapod) 官方開源專案。
