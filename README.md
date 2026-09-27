@@ -45,11 +45,11 @@ The trained policy is extracted and exported as a lightweight **1.9 KB** static 
   * Resolves all 6 coordinate system conflicts when importing FreeCAD STL meshes into MuJoCo (axis flips, mirrored armor, hinge offset compensation).
   * Uses a decoupled "Visual Layer (Group 1)" and "Physics Collision Layer (Group 3)" architecture with zero interpenetration and high throughput.
 * **Residual Reinforcement Learning Architecture**:
-  * Implements Boston Dynamics / ETH ANYmal benchmark architecture: $\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \Delta \mathbf{q}_{\text{RL}}(s)$.
+  * Implements Boston Dynamics / ETH ANYmal benchmark architecture: $`\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \mathbf{a}_{\text{RL}}(s_t)`$.
   * Eliminates the local-optima deadzone where pure RL tends to freeze all legs, achieving convergence tens of times faster (breaching 8,480+ score in ~1 minute).
 * **CPG Gait Phase Clock & 67-Dimensional Observation Space**:
   * Injects tripod gait phase clock $[\sin\phi, \cos\phi]$ into the observation space for a robust 1.5 Hz walking rhythm.
-  * Supports omnidirectional dynamic commands $[v_x, v_y, \omega_z]$; clock instantly freezes to zero on brake, achieving "hold to walk, release to stop".
+  * Supports omnidirectional dynamic commands $`[v_x, v_y, \omega_z]`$; clock instantly freezes to zero on brake, achieving "hold to walk, release to stop".
 * **3D Heightfield Terrain & Zero-Shot Blind Walking**:
   * Supports 6 dynamic 3D terrains: `flat`, `blocks`, `bumps`, `rough`, `slope`, and `park`.
   * Achieves 100% blind-walking survival under $\pm 4.0\text{ cm}$ obstacles using only proprioception and active compliance, without vision or radar.
@@ -124,11 +124,14 @@ flowchart TD
 ### 2. Create Virtual Environment & Install Dependencies
 
 ```bash
-# 1. Create and activate Python virtual environment
+# 1. Enter the Digital Twin core project directory
+cd MakeYourPet-DigitalTwin
+
+# 2. Create and activate Python virtual environment
 python -m venv hexapod_rl_env
 .\hexapod_rl_env\Scripts\activate
 
-# 2. Install core dependencies
+# 3. Install core dependencies
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 pip install mujoco gymnasium stable-baselines3 onnx onnxruntime trimesh scipy numpy matplotlib
 ```
@@ -238,32 +241,44 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 
 ```text
 Make Your Pet - Digital Twin/
-├── models/
-│   ├── hexapod.xml                # MuJoCo core model (18-DOF, STL visuals, capsule colliders, 3D terrain)
-│   ├── one_leg.xml                # Single-leg 3-axis prototype debug model
-│   ├── hexapod_final_policy.zip   # Latest converged PPO policy weights
-│   ├── hexapod_policy.onnx        # Lightweight ONNX edge inference model (1.9 KB)
-│   └── best_model/                # EvalCallback best-ever weights
+├── MakeYourPet-DigitalTwin/           # Digital Twin core source code & trained models
+│   ├── models/                        # MuJoCo XML models, textures & trained RL weights
+│   │   ├── hexapod.xml                # MuJoCo core model (18-DOF, STL visuals, capsule colliders, 3D terrain)
+│   │   ├── one_leg.xml                # Single-leg 3-axis prototype debug model
+│   │   ├── hexapod_final_policy.zip   # Latest converged PPO policy weights
+│   │   ├── hexapod_policy.onnx        # Lightweight ONNX edge inference model (1.9 KB)
+│   │   ├── hexapod_policy.onnx.data   # ONNX external tensor weight data
+│   │   └── best_model/                # EvalCallback best-ever weights
+│   │
+│   ├── KnownIssue/                    # In-depth technical root-cause guides
+│   │   ├── coordinate_transformation_issues.md  # CAD coordinate conflicts & reverse-engineering fixes
+│   │   ├── training_issues.md                   # Top-10 RL training errors & solutions
+│   │   └── DEBUG/                               # Debug records and diagnostic notes
+│   │
+│   ├── hexapod_env.py                 # Gymnasium wrapper (67D obs, 18D action, 50Hz, 3D heightfield)
+│   ├── tripod_kinematics.py           # Analytical tripod gait feedforward generator (Human Prior Engine)
+│   ├── train.py                       # PPO multi-process vectorized parallel training main script
+│   ├── demo.py                        # Game-grade 3D real-time remote control workstation
+│   ├── verify_command_tracking.py     # 5-scenario closed-loop command tracking benchmark
+│   ├── export_onnx.py                 # PPO Actor → ONNX lightweight model exporter
+│   ├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
+│   ├── record_trajectory.py           # 50 FPS physics trajectory recorder
+│   ├── make_video.py                  # Trajectory frame renderer & video synthesizer
+│   ├── blender_cinematic.py           # Blender 5.2 automated cinematic render script
+│   │
+│   ├── experiment_log.md              # Project experiment log & full milestone progress tracker
+│   ├── KnownIssue.md                  # Global known-issues quick reference
+│   └── LICENSE                        # Apache 2.0 License
 │
-├── MakeYourPet-hexapod/           # Original 3D-printed STL files & configs (official MakeYourPet repo)
+├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD
+│   └── hexapod-main/                  # Official MakeYourPet repository assets (STEP, STL, Chipo, etc.)
 │
-├── KnownIssue/                    # Comprehensive pitfall guides & technical docs
-│   ├── coordinate_transformation_issues.md  # CAD coordinate conflicts & reverse-engineering fixes
-│   └── training_issues.md                   # Top-10 RL training errors & solutions
-│
-├── hexapod_env.py                 # Gymnasium wrapper (67D obs, 18D action, 50Hz, 3D heightfield)
-├── tripod_kinematics.py           # Analytical tripod gait feedforward generator (Human Prior Engine)
-├── train.py                       # PPO multi-process vectorized parallel training main script
-├── demo.py                        # Game-grade 3D real-time remote control workstation
-├── verify_command_tracking.py     # 5-scenario closed-loop command tracking benchmark
-├── export_onnx.py                 # PPO Actor → ONNX lightweight model exporter
-├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
-├── record_trajectory.py           # 50 FPS physics trajectory recorder
-├── blender_cinematic.py           # Blender 5.2 automated cinematic render script
-│
-├── experiment_log.md              # Project experiment log & full milestone progress tracker
-├── KnownIssue.md                  # Global known-issues quick reference
-└── README.md                      # Project main documentation
+├── Demo Recording 2026-09-27.mp4      # Full video recording (1m 15s)
+├── demo_locomotion.gif                # Autonomous blind locomotion demo GIF
+├── Demo1.png / Demo2.png              # Perspective and front view renders
+├── Make_Your_Pet_Digital_Twin_and_AI_Gait_Learning_Implementation_Guide_3ed-en.md  # Complete implementation guide (EN)
+├── Make_Your_Pet_數位孿生與AI步態學習實作計畫3ed-zh.md                                # Complete implementation guide (ZH)
+└── README.md                          # Repository main documentation
 ```
 
 ---
@@ -275,9 +290,9 @@ Make Your Pet - Digital Twin/
 3. **Reinforcement Learning Library**: [Stable-Baselines3 (SB3)](https://github.com/DLR-RM/stable-baselines3)
 4. **Residual RL Paper**: *Residual Reinforcement Learning for Robot Locomotion* (Silver et al., ETH Zurich / ANYbotics)
 5. **Project Pitfall Guides**:
-   * [CAD Geometry & MuJoCo Coordinate Conflict Technical Doc](KnownIssue/coordinate_transformation_issues.md)
-   * [AI RL Training Errors & Solutions Manual](KnownIssue/training_issues.md)
-   * [Global Known-Issues Quick Guide](KnownIssue.md)
+   * [CAD Geometry & MuJoCo Coordinate Conflict Technical Doc](MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
+   * [AI RL Training Errors & Solutions Manual](MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
+   * [Global Known-Issues Quick Guide](MakeYourPet-DigitalTwin/KnownIssue.md)
 
 ---
 
@@ -338,11 +353,11 @@ Project code and model configurations are open-sourced under the **Apache Licens
   * 徹底解決 FreeCAD STL 原廠網格導入 MuJoCo 的 6 大坐標系衝突（繞軸翻轉、鏡像護甲、鉸接孔位補償）。
   * 採「視覺層 (Group 1)」與「物理碰撞層 (Group 3)」解耦架構，零碰撞穿透且維持高吞吐量。
 * **殘差強化學習架構（Residual RL）**：
-  * 引入波士頓動力 / ETH ANYmal 業界標竿架構：$\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \Delta \mathbf{q}_{\text{RL}}(s)$。
+  * 引入波士頓動力 / ETH ANYmal 業界標竿架構：$`\mathbf{q}_{\text{ctrl}}(t) = \mathbf{q}_{\text{ref}}(t, \text{cmd}) + \alpha \cdot \mathbf{a}_{\text{RL}}(s_t)`$。
   * 徹底根除純 RL 容易陷入「六足黏地不敢抬步」的局部最優死區，訓練收斂速度提升數十倍（約 1 分鐘即突破 8,480+ 分）。
 * **CPG 步態相位時鐘與 67 維觀測空間**：
   * 觀測空間注入三角步態相位時鐘 $[\sin\phi, \cos\phi]$，提供 1.5 Hz 穩健行走節奏。
-  * 支援全向速度動態指令 $[v_x, v_y, \omega_z]$，煞車時時鐘瞬時歸零凍結，達成「按住前進、放開即停」。
+  * 支援全向速度動態指令 $`[v_x, v_y, \omega_z]`$，煞車時時鐘瞬時歸零凍結，達成「按住前進、放開即停」。
 * **3D 高度場起伏地貌與零樣本盲走**：
   * 支援 6 種動態 3D 地形：平地 (`flat`)、階梯石柱 (`blocks`)、連續波浪 (`bumps`)、碎石 (`rough`)、坡道 (`slope`) 與複合越野公園 (`park`)。
   * 在無視覺與雷達感測下，依賴本體感覺與主動柔順避震，在 $\pm 4.0\text{ cm}$ 險阻起伏下達成 100% 盲走存活率。
@@ -417,11 +432,14 @@ flowchart TD
 ### 2. 安裝虛擬環境與相依套件
 
 ```bash
-# 1. 建立並啟用 Python 虛擬環境
+# 1. 進入數位孿生核心專案目錄
+cd MakeYourPet-DigitalTwin
+
+# 2. 建立並啟用 Python 虛擬環境
 python -m venv hexapod_rl_env
 .\hexapod_rl_env\Scripts\activate
 
-# 2. 安裝核心相依套件
+# 3. 安裝核心相依套件
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 pip install mujoco gymnasium stable-baselines3 onnx onnxruntime trimesh scipy numpy matplotlib
 ```
@@ -531,32 +549,44 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 
 ```text
 Make Your Pet - Digital Twin/
-├── models/
-│   ├── hexapod.xml                # MuJoCo 核心模型 (18-DOF, STL 視覺, 膠囊碰撞, 3D 地形)
-│   ├── one_leg.xml                # 單腿 3 軸原型調試模型
-│   ├── hexapod_final_policy.zip   # 訓練收斂之最新 PPO 策略權重
-│   ├── hexapod_policy.onnx        # 輕量化 ONNX 邊緣推論模型 (1.9 KB)
-│   └── best_model/                # EvalCallback 自動保存之歷史最優權重
+├── MakeYourPet-DigitalTwin/           # 數位孿生核心代碼庫與訓練權重
+│   ├── models/                        # MuJoCo 物理模型、材質貼圖與 RL 權重
+│   │   ├── hexapod.xml                # MuJoCo 核心模型 (18-DOF, STL 視覺, 膠囊碰撞, 3D 地形)
+│   │   ├── one_leg.xml                # 單腿 3 軸原型調試模型
+│   │   ├── hexapod_final_policy.zip   # 訓練收斂之最新 PPO 策略權重
+│   │   ├── hexapod_policy.onnx        # 輕量化 ONNX 邊緣推論模型 (1.9 KB)
+│   │   ├── hexapod_policy.onnx.data   # ONNX 外部張量權重資料
+│   │   └── best_model/                # EvalCallback 自動保存之歷史最優權重
+│   │
+│   ├── KnownIssue/                    # 完整避坑指南與專題技術文件
+│   │   ├── coordinate_transformation_issues.md  # CAD 坐標系衝突與逆向修復推導
+│   │   ├── training_issues.md                   # 10 大強化學習訓練錯誤與解決對策
+│   │   └── DEBUG/                               # 調試記錄與診斷筆記
+│   │
+│   ├── hexapod_env.py                 # Gymnasium 封裝環境 (67D 觀測, 18D 動作, 50Hz, 3D 高度場)
+│   ├── tripod_kinematics.py           # 解析三角步態前饋產生器 (Human Prior Engine)
+│   ├── train.py                       # PPO 多進程向量化並行訓練主程式
+│   ├── demo.py                        # 電玩級 3D 即時遙控與變速工作台
+│   ├── verify_command_tracking.py     # 5 大運動情境閉環跟隨基準驗證
+│   ├── export_onnx.py                 # PPO Actor 轉 ONNX 輕量模型導出器
+│   ├── generate_hexapod_xml.py        # 18 自由度 XML 動態生成與參數校準工具
+│   ├── record_trajectory.py           # 50 FPS 物理運動軌跡錄製器
+│   ├── make_video.py                  # 離屏軌跡渲染與 MP4 影片合成器
+│   ├── blender_cinematic.py           # Blender 5.2 自動化影視級渲染腳本
+│   │
+│   ├── experiment_log.md              # 專案實驗日誌與全里程碑進度追蹤
+│   ├── KnownIssue.md                  # 全域已知問題速查手冊
+│   └── LICENSE                        # Apache 2.0 開源授權條款
 │
-├── MakeYourPet-hexapod/           # 原廠 3D 列印 STL 與配置檔 (MakeYourPet 官方倉庫)
+├── MakeYourPet-hexapod/               # 原廠 3D 列印 STL 與硬體 CAD 零件庫
+│   └── hexapod-main/                  # MakeYourPet 官方倉庫資源 (STEP, STL, Chipo 等)
 │
-├── KnownIssue/                    # 完整避坑指南與專題技術文件
-│   ├── coordinate_transformation_issues.md  # CAD 坐標系衝突與逆向修復推導
-│   └── training_issues.md                   # 10 大強化學習訓練錯誤與解決對策
-│
-├── hexapod_env.py                 # Gymnasium 封裝環境 (67D 觀測, 18D 動作, 50Hz, 3D 高度場)
-├── tripod_kinematics.py           # 解析三角步態前饋產生器 (Human Prior Engine)
-├── train.py                       # PPO 多進程向量化並行訓練主程式
-├── demo.py                        # 電玩級 3D 即時遙控與變速工作台
-├── verify_command_tracking.py     # 5 大運動情境閉環跟隨基準驗證
-├── export_onnx.py                 # PPO Actor 轉 ONNX 輕量模型導出器
-├── generate_hexapod_xml.py        # 18 自由度 XML 動態生成與參數校準工具
-├── record_trajectory.py           # 50 FPS 物理運動軌跡錄製器
-├── blender_cinematic.py           # Blender 5.2 自動化影視級渲染腳本
-│
-├── experiment_log.md              # 專案實驗日誌與全里程碑進度追蹤
-├── KnownIssue.md                  # 全域已知問題速查手冊
-└── README.md                      # 專案主說明文件
+├── Demo Recording 2026-09-27.mp4      # 完整行走操控展示錄影 (1分15秒)
+├── demo_locomotion.gif                # 3D 地形自主盲走動態展示 GIF
+├── Demo1.png / Demo2.png              # 數位孿生透視圖與正視圖
+├── Make_Your_Pet_Digital_Twin_and_AI_Gait_Learning_Implementation_Guide_3ed-en.md  # 實作指南 (英文第3版)
+├── Make_Your_Pet_數位孿生與AI步態學習實作計畫3ed-zh.md                                # 實作指南 (中文第3版)
+└── README.md                          # 專案主說明文件
 ```
 
 ---
@@ -568,9 +598,9 @@ Make Your Pet - Digital Twin/
 3. **強化學習函式庫**：[Stable-Baselines3 (SB3)](https://github.com/DLR-RM/stable-baselines3)
 4. **殘差強化學習文獻**：*Residual Reinforcement Learning for Robot Locomotion* (Silver et al., ETH Zurich / ANYbotics)
 5. **本專案避坑手冊**：
-   * [CAD 幾何與 MuJoCo 坐標系衝突技術文檔](KnownIssue/coordinate_transformation_issues.md)
-   * [AI 強化學習訓練錯誤與對策手冊](KnownIssue/training_issues.md)
-   * [全域已知問題速查指南](KnownIssue.md)
+   * [CAD 幾何與 MuJoCo 坐標系衝突技術文檔](MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
+   * [AI 強化學習訓練錯誤與對策手冊](MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
+   * [全域已知問題速查指南](MakeYourPet-DigitalTwin/KnownIssue.md)
 
 ---
 
