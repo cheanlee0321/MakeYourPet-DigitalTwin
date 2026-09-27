@@ -1,0 +1,64 @@
+<mujoco model="makeyourpet_one_leg">
+  <!-- 編譯器設定：角度單位使用度數 (degree) -->
+  <compiler angle="degree" coordinate="local"/>
+
+  <!-- 物理選項：使用 implicitfast 隱式求解器，徹底根除數值剛性震盪 -->
+  <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast"/>
+
+  <!-- 材質與視覺外觀 -->
+  <asset>
+    <material name="mat_base" rgba="0.25 0.25 0.3 1"/>
+    <material name="mat_coxa" rgba="0.95 0.6 0.1 1"/>
+    <material name="mat_femur" rgba="0.2 0.6 0.95 1"/>
+    <material name="mat_tibia" rgba="0.2 0.85 0.4 1"/>
+    <material name="mat_tip" rgba="0.9 0.1 0.1 1"/>
+  </asset>
+
+  <!-- 世界空間主體定義 -->
+  <worldbody>
+    <light diffuse="0.8 0.8 0.8" pos="0 0 1.5" dir="0 0 -1"/>
+    <geom name="ground" type="plane" size="0.6 0.6 0.01" rgba="0.85 0.85 0.85 1"/>
+
+    <!-- 懸吊測試基座：固定在離地 0.25m 高度，模擬實驗室吊臂架懸空測試 -->
+    <body name="base_mount" pos="0 0 0.25">
+      <geom name="mount_geom" type="box" size="0.03 0.03 0.015" material="mat_base"/>
+
+      <!-- ================= 關節 1：Coxa (基座擺動節) ================= -->
+      <body name="coxa_link" pos="0.03 0 0">
+        <joint name="coxa_joint" type="hinge" axis="0 0 1" range="-45 45" damping="0.1"/>
+        <!-- 加入真實舵機質量 60g (0.06kg) -->
+        <geom name="coxa_geom" type="capsule" fromto="0 0 0 0.043 0 0" size="0.012" mass="0.06" material="mat_coxa"/>
+
+        <!-- ================= 關節 2：Femur (大腿升降節) ================= -->
+        <body name="femur_link" pos="0.043 0 0">
+          <joint name="femur_joint" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+          <!-- 加入大腿與舵機質量 80g (0.08kg) -->
+          <geom name="femur_geom" type="capsule" fromto="0 0 0 0.080 0 -0.02" size="0.010" mass="0.08" material="mat_femur"/>
+
+          <!-- ================= 關節 3：Tibia (小腿屈伸節) ================= -->
+          <body name="tibia_link" pos="0.080 0 -0.02">
+            <joint name="tibia_joint" type="hinge" axis="0 1 0" range="-90 30" damping="0.1"/>
+            <!-- 小腿骨架 50g -->
+            <geom name="tibia_geom" type="capsule" fromto="0 0 0 0.05 0 -0.12" size="0.008" mass="0.05" material="mat_tibia"/>
+            <!-- 腳尖接觸球體 10g -->
+            <geom name="foot_tip" type="sphere" pos="0.05 0 -0.12" size="0.012" mass="0.01" material="mat_tip"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- 排除相鄰連桿間的自我干涉穿模 (Self-Collision Exclude) -->
+  <contact>
+    <exclude body1="base_mount" body2="coxa_link"/>
+    <exclude body1="coxa_link" body2="femur_link"/>
+    <exclude body1="femur_link" body2="tibia_link"/>
+  </contact>
+
+  <!-- 馬達致動器：設定真實舵機扭矩極限 (2.5 N·m) 與合理剛性 (kp=5.0) -->
+  <actuator>
+    <position name="motor_coxa" joint="coxa_joint" kp="5.0" kv="0.5" ctrlrange="-45 45" forcerange="-2.5 2.5"/>
+    <position name="motor_femur" joint="femur_joint" kp="5.0" kv="0.5" ctrlrange="-60 60" forcerange="-2.5 2.5"/>
+    <position name="motor_tibia" joint="tibia_joint" kp="5.0" kv="0.5" ctrlrange="-90 30" forcerange="-2.5 2.5"/>
+  </actuator>
+</mujoco>
