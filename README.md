@@ -3,8 +3,11 @@
 ### (數位孿生與 AI 強化學習步態控制系統)
 
 <p align="center">
-  <img src="models/arena_10x10_preview.png" alt="Make Your Pet Arena Preview" width="85%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  <img src="Demo1.png" alt="Demo 1 — Hexapod Digital Twin Perspective View" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  &nbsp;
+  <img src="Demo2.png" alt="Demo 2 — Hexapod Digital Twin Front View" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
 </p>
+<p align="center"><em>MuJoCo Digital Twin — 18-DOF high-fidelity simulation (perspective & front view)</em></p>
 
 <p align="center">
   <a href="https://github.com/MakeYourPet/hexapod"><img src="https://img.shields.io/badge/Hardware-MakeYourPet%20Hexapod-orange?style=flat-square&logo=github" alt="Hardware"></a>
@@ -285,8 +288,11 @@ Project code and model configurations are open-sourced under the **Apache Licens
 ### (18-DOF Hexapod Digital Twin & Residual Reinforcement Learning)
 
 <p align="center">
-  <img src="models/arena_10x10_preview.png" alt="Make Your Pet Arena Preview" width="85%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  <img src="Demo1.png" alt="Demo 1 — 六足機器人數位孿生俯仰視角" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  &nbsp;
+  <img src="Demo2.png" alt="Demo 2 — 六足機器人數位孿生正視角" width="48%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
 </p>
+<p align="center"><em>MuJoCo 數位孿生體 — 18 自由度高擬真模擬（斜視角 & 正視角）</em></p>
 
 <p align="center">
   <a href="https://github.com/MakeYourPet/hexapod"><img src="https://img.shields.io/badge/Hardware-MakeYourPet%20Hexapod-orange?style=flat-square&logo=github" alt="Hardware"></a>
