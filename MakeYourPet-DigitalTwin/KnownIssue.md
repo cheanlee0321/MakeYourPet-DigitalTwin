@@ -3,8 +3,8 @@
 > **專案名稱**：Make Your Pet 18-DOF Hexapod Digital Twin & AI Locomotion  
 > **更新日期**：2026-09-27  
 > **核心導航**：
-> 1. [一、 CAD 幾何導出與 MuJoCo 坐標系衝突問題（已解決）](#一-cad-幾何導出與-mujoco-坐標系衝突問題已解決)（詳見子文件：[coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/coordinate_transformation_issues.md)）
-> 2. [二、 AI 強化學習訓練錯誤、死區與避坑對策（已解決）](#二-ai-強化學習訓練錯誤死區與避坑對策已解決)（詳見子文件：[training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/training_issues.md)）
+> 1. [一、 CAD 幾何導出與 MuJoCo 坐標系衝突問題（已解決）](#一-cad-幾何導出與-mujoco-坐標系衝突問題已解決)（詳見子文件：[coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)）
+> 2. [二、 AI 強化學習訓練錯誤、死區與避坑對策（已解決）](#二-ai-強化學習訓練錯誤死區與避坑對策已解決)（詳見子文件：[training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)）
 > 3. [三、 Sim-to-Real 實體部署潛在問題與預防對策](#三-sim-to-real-實體部署潛在問題與預防對策)
 
 ---
@@ -34,7 +34,7 @@
    - *現象*：網格碰撞導致數值發散穿透。
    - *解法*：尖端精確鎖定於 `pos="0.0477 \pm 0.0025 -0.1077"`，配置半徑 10mm 彈性橡膠球體（`friction="1.2 0.05 0.001"`, `solref="0.01 1"`）。
 
-> 完整幾何逆向公式與推導請參見：[KnownIssue/coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/coordinate_transformation_issues.md)
+> 完整幾何逆向公式與推導請參見：[KnownIssue/coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
 
 ---
 
@@ -79,7 +79,7 @@ flowchart TD
 | **09** | **舵機高頻抖動與過熱（Jitter）** | 獎勵函數只看速度未約束變化率，導致每步（20ms）輸出動作劇烈突跳 | 加入動作平滑懲罰：$r_{\text{smooth}} = -0.03 \sum (\Delta a)^2$ 與幅度懲罰 $-0.05 \sum a^2$ | 動作平滑度提升 90% 以上，四肢軌跡流暢連續 |
 | **10** | **ONNX 導出維度警告** | PyTorch 2.4+ 對舊版 opset 14 與動態維度相容性問題 | 升級為 `opset_version=18`，限制輸出在 $[-1.0, 1.0]$ 並通過 ONNX Runtime 驗證 | 成功導出僅 **1.9 KB** 之輕量化神經網路 |
 
-> 完整數學推導、程式碼片段與實測圖表請參見：[KnownIssue/training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/training_issues.md)
+> 完整數學推導、程式碼片段與實測圖表請參見：[KnownIssue/training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
 
 ---
 

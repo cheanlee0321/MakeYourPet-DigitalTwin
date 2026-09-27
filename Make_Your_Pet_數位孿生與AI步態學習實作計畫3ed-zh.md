@@ -82,25 +82,50 @@ flowchart TD
 
 ### 1.4 專案檔案結構
 
-```
-Make Your Pet Digital Twin/
-├── models/
-│   ├── hexapod.xml              # MuJoCo 物理模型描述檔
-│   ├── best_model/
-│   │   └── best_model.zip       # 訓練過程中的最佳權重
-│   ├── hexapod_final_policy.zip # 訓練結束時的最終權重
-│   └── hexapod_policy.onnx      # 導出的輕量神經網路
-├── MakeYourPet-hexapod/         # 開源硬體原始資源（STL、接線圖等）
-├── tripod_kinematics.py         # 三角步態前饋運動學
-├── hexapod_env.py               # Gymnasium 強化學習環境
-├── train.py                     # PPO 訓練主程式
-├── verify_command_tracking.py   # 指令跟隨驗證
-├── demo.py                      # 3D 鍵盤即時操控
-├── export_onnx.py               # ONNX 模型導出
-├── record_trajectory.py         # 步態軌跡錄製（供 Blender 用）
-├── blender_cinematic.py         # Blender 場景自動建構
-├── make_video.py                # 算圖影格合成 MP4
-└── hexapod_rl_env/              # Python 虛擬環境
+```text
+Make Your Pet - Digital Twin/
+├── MakeYourPet-DigitalTwin/           # 數位孿生核心原始碼與訓練模型目錄
+│   ├── models/                        # MuJoCo XML 模型、貼圖與 RL 權重檔
+│   │   ├── hexapod.xml                # MuJoCo 物理模型描述檔（18 自由度高精模型）
+│   │   ├── one_leg.xml                # 單腿原型測試模型
+│   │   ├── best_model/                # 訓練過程中的最佳權重目錄（best_model.zip）
+│   │   ├── hexapod_final_policy.zip   # 訓練結束時的最終權重
+│   │   ├── hexapod_policy.onnx        # 導出的輕量神經網路（1.9 KB）
+│   │   ├── hexapod_policy.onnx.data   # ONNX 外部權重張量檔
+│   │   ├── arena_10x10_preview.png    # 地形競技場預覽圖
+│   │   └── wood.png                   # 地面木紋貼圖
+│   │
+│   ├── KnownIssue/                    # 技術避坑與除錯分析報告
+│   │   ├── coordinate_transformation_issues.md # CAD 坐標系衝突與逆向工程修正
+│   │   ├── training_issues.md                  # 強化學習十大訓練錯誤與對策
+│   │   └── DEBUG/                              # 歷史除錯腳本與校正記錄
+│   │       └── test_kinematics_openloop.py     # 開環步態運動學校驗腳本
+│   │
+│   ├── tripod_kinematics.py           # 三角步態前饋運動學引擎
+│   ├── hexapod_env.py                 # Gymnasium 強化學習環境封裝
+│   ├── train.py                       # PPO 向量化平行訓練主程式
+│   ├── verify_command_tracking.py     # 指令跟隨性能驗證基準
+│   ├── demo.py                        # 3D 鍵盤即時遙控工作站
+│   ├── export_onnx.py                 # PPO Actor → ONNX 輕量模型導出腳本
+│   ├── generate_hexapod_xml.py        # 18 自由度 XML 動態產生與參數校準腳本
+│   ├── record_trajectory.py           # 50 FPS 步態軌跡錄製腳本（供 Blender 用）
+│   ├── blender_cinematic.py           # Blender 5.2 自動化電影級算圖腳本
+│   ├── make_video.py                  # 算圖影格合成 MP4 影片腳本
+│   │
+│   ├── experiment_log.md              # 實驗日誌與里程碑追蹤表
+│   ├── KnownIssue.md                  # 全域已知問題快速導覽
+│   ├── LICENSE                        # Apache 2.0 開源授權
+│   └── hexapod_rl_env/                # Python 虛擬環境（建議建於此目錄下）
+│
+├── MakeYourPet-hexapod/               # 開源硬體原始資源與 CAD 檔案
+│   └── hexapod-main/                  # 官方 MakeYourPet 儲存庫資源（STEP、STL、Chipo 等）
+│
+├── Demo Recording 2026-09-27.mp4      # 完整錄影示範檔
+├── demo_locomotion.gif                # 自主盲行展示動圖
+├── Demo1.png / Demo2.png              # 透視視角與正視角渲染圖
+├── Make_Your_Pet_Digital_Twin_and_AI_Gait_Learning_Implementation_Guide_3ed-en.md  # 實作教學指引（英文版）
+├── Make_Your_Pet_數位孿生與AI步態學習實作計畫3ed-zh.md                                # 實作教學指引（中文版）
+└── README.md                          # 專案首頁說明文件
 ```
 
 ---
@@ -126,9 +151,13 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ### 步驟 0-2：建立 Python 虛擬環境
 
-在專案根目錄執行：
+先進入數位孿生核心專案目錄 `MakeYourPet-DigitalTwin`（後續的所有模擬、訓練與模型導出指令皆在此目錄下執行）：
 
 ```powershell
+# 1. 進入數位孿生核心專案目錄
+cd MakeYourPet-DigitalTwin
+
+# 2. 建立並啟動 Python 虛擬環境
 python -m venv hexapod_rl_env
 .\hexapod_rl_env\Scripts\Activate.ps1
 ```
@@ -204,7 +233,7 @@ MakeYourPet 六足機器人有 6 條腿、18 個舵機關節（每條腿 3 個�
 
 ### 3.4 物理模型描述檔：`models/hexapod.xml`
 
-核心配置段落如下（完整版請參照專案中的 `models/hexapod.xml`）：
+核心配置段落如下（該檔案位於 `MakeYourPet-DigitalTwin/models/hexapod.xml`）：
 
 ```xml
 <mujoco model="makeyourpet_hexapod">
@@ -254,7 +283,10 @@ MakeYourPet 六足機器人有 6 條腿、18 個舵機關節（每條腿 3 個�
 </mujoco>
 ```
 
-建好後可以用 MuJoCo 內建檢視器確認組裝是否正確：
+> [!NOTE]
+> 由於物理模擬與訓練腳本皆以 `MakeYourPet-DigitalTwin/` 作為工作目錄執行，XML 中的相對路徑 `file="../MakeYourPet-hexapod/hexapod-main/STL/frame.stl"` 可直接向上索引並正確讀取同級的 `MakeYourPet-hexapod/` 開源硬體資源目錄。
+
+建好後可以在 `MakeYourPet-DigitalTwin` 目錄下透過 MuJoCo 內建檢視器確認組裝是否正確：
 
 ```powershell
 python -m mujoco.viewer --mjcf=models/hexapod.xml
@@ -270,7 +302,7 @@ python -m mujoco.viewer --mjcf=models/hexapod.xml
 
 ### 4.1 `tripod_kinematics.py`
 
-在專案根目錄建立此檔案：
+位於 `MakeYourPet-DigitalTwin/tripod_kinematics.py`（在 `MakeYourPet-DigitalTwin/` 目錄下建立或編輯此檔案）：
 
 ```python
 """
@@ -357,7 +389,11 @@ class TripodKinematics:
 
 ### 4.2 驗證前饋運動學
 
-可以用 `test_kinematics_openloop.py` 確認，純粹靠數學公式就能讓機器人以約 0.26 m/s 的速度穩定前進。
+在 `MakeYourPet-DigitalTwin/` 目錄下執行 `KnownIssue/DEBUG/test_kinematics_openloop.py`，確認純粹靠數學公式就能讓機器人以約 0.26 m/s 的速度穩定前進，無需強化學習介入：
+
+```powershell
+python KnownIssue/DEBUG/test_kinematics_openloop.py
+```
 
 ---
 
@@ -382,7 +418,7 @@ class TripodKinematics:
 
 ### 5.3 環境原始碼：`hexapod_env.py`
 
-在專案根目錄建立此檔案：
+位於 `MakeYourPet-DigitalTwin/hexapod_env.py`（在 `MakeYourPet-DigitalTwin/` 目錄下建立或編輯此檔案）：
 
 ```python
 """
@@ -688,6 +724,8 @@ class HexapodEnv(gym.Env):
 
 ### 6.1 訓練主程式：`train.py`
 
+位於 `MakeYourPet-DigitalTwin/train.py`。
+
 ```python
 """
 train.py
@@ -829,6 +867,8 @@ if __name__ == "__main__":
 
 ### 6.2 開始訓練
 
+在 `MakeYourPet-DigitalTwin/` 目錄下執行：
+
 ```powershell
 python train.py --timesteps 100000 --num-envs 12
 ```
@@ -855,7 +895,7 @@ python train.py --timesteps 100000 --num-envs 12
 
 ### 7.1 指令跟隨驗證：`verify_command_tracking.py`
 
-驗證 AI 在不同指令下的表現：
+位於 `MakeYourPet-DigitalTwin/verify_command_tracking.py`。在 `MakeYourPet-DigitalTwin/` 目錄下執行，驗證不同指令下的 AI 表現：
 
 ```powershell
 python verify_command_tracking.py
@@ -869,6 +909,8 @@ python verify_command_tracking.py
 - 煞車 → 速度收斂至 0.000 m/s
 
 ### 7.2 鍵盤即時操控：`demo.py`
+
+位於 `MakeYourPet-DigitalTwin/demo.py`。在 `MakeYourPet-DigitalTwin/` 目錄下執行：
 
 ```powershell
 python demo.py
@@ -888,6 +930,8 @@ python demo.py
 | `Ctrl + 滑鼠拖拉` | 對機器人施加外力，測試平衡能力 |
 
 ### 7.3 導出 ONNX 模型：`export_onnx.py`
+
+位於 `MakeYourPet-DigitalTwin/export_onnx.py`。
 
 ```python
 """
@@ -957,11 +1001,13 @@ if __name__ == "__main__":
     main()
 ```
 
+在 `MakeYourPet-DigitalTwin/` 目錄下執行：
+
 ```powershell
 python export_onnx.py
 ```
 
-導出的 ONNX 檔約 1.9 KB，可以在 Raspberry Pi、ESP32-S3 或 Servo 2040 等嵌入式板子上運行。
+導出的 ONNX 檔儲存於 `models/hexapod_policy.onnx`（位於 `MakeYourPet-DigitalTwin/` 內，約 1.9 KB），可以在 Raspberry Pi、ESP32-S3 或 Servo 2040 等嵌入式板子上運行。
 
 ---
 
@@ -971,17 +1017,21 @@ python export_onnx.py
 
 ### 8.1 錄製步態軌跡
 
+在 `MakeYourPet-DigitalTwin/` 目錄下執行（`record_trajectory.py`）：
+
 ```powershell
 python record_trajectory.py --duration 5.0 --motion combo
 ```
 
 `--motion` 可選模式：`combo`（多動作切換）、`forward`（直行）、`sprint`（衝刺）、`turn`（旋轉）。
 
-輸出檔案：
+輸出檔案（儲存於 `MakeYourPet-DigitalTwin/` 內）：
 - `blender_exports/` 目錄下的 11 個 `.obj` 網格檔
 - `gait_trajectory.json`：250 幀（5 秒 × 50 FPS）的姿態資料
 
 ### 8.2 自動建構 Blender 場景
+
+在 `MakeYourPet-DigitalTwin/` 目錄下執行：
 
 ```powershell
 & "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --python blender_cinematic.py
@@ -1096,17 +1146,23 @@ Windows 的多行程機制要求主程式碼放在 `if __name__ == '__main__':` 
 
 那些是編輯輔助標記（攝影機視錐體、約束線），算圖時不會出現。按 `Numpad 0` 進入攝影機視角，或按 `Shift + Alt + Z` 隱藏所有標記。
 
+> [!TIP]
+> 更多深入技術成因分析與除錯紀錄，請參閱：
+> - [CAD 幾何與坐標系衝突技術文檔](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
+> - [AI 強化學習訓練錯誤與對策手冊](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
+> - [全域已知問題快速導覽手冊](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue.md)
+
 ---
 
 ## 十一、里程碑檢核表
 
 逐步完成，每完成一項打勾：
 
-- [ ] **M1 環境就緒**：虛擬環境建立完成，PyTorch 與 MuJoCo 安裝驗證通過。
-- [ ] **M2 物理模型組裝**：`models/hexapod.xml` 完成，用 `python -m mujoco.viewer --mjcf=models/hexapod.xml` 確認零件正確組裝、可用滑鼠拖拉。
-- [ ] **M3 前饋驗證**：`tripod_kinematics.py` 完成，開環測試確認能驅動機器人前進約 0.26 m/s。
+- [ ] **M1 環境就緒**：在 `MakeYourPet-DigitalTwin/` 下建立虛擬環境，確認 PyTorch 與 MuJoCo 安裝無誤。
+- [ ] **M2 物理模型組裝**：`models/hexapod.xml` 完成，在 `MakeYourPet-DigitalTwin/` 下執行 `python -m mujoco.viewer --mjcf=models/hexapod.xml` 確認零件正確組裝、可用滑鼠拖拉。
+- [ ] **M3 前饋驗證**：`tripod_kinematics.py` 完成，執行 `KnownIssue/DEBUG/test_kinematics_openloop.py` 開環測試確認能驅動機器人前進約 0.26 m/s。
 - [ ] **M4 環境封裝**：`hexapod_env.py` 完成，67 維觀測、18 維殘差動作空間正常運作。
-- [ ] **M5 訓練完成**：執行 `python train.py --timesteps 100000 --num-envs 12`，評估回報超過 8,000 分。
-- [ ] **M6 指令跟隨驗證**：執行 `verify_command_tracking.py`，前進、轉向、煞車均正確回應。
-- [ ] **M7 操控與導出**：`demo.py` 可用鍵盤操控；`export_onnx.py` 成功導出 ONNX 模型。
+- [ ] **M5 訓練完成**：在 `MakeYourPet-DigitalTwin/` 下執行 `python train.py --timesteps 100000 --num-envs 12`，評估回報超過 8,000 分。
+- [ ] **M6 指令跟隨驗證**：在 `MakeYourPet-DigitalTwin/` 下執行 `python verify_command_tracking.py`，前進、轉向、煞車均正確回應。
+- [ ] **M7 操控與導出**：`demo.py` 可用鍵盤操控；`export_onnx.py` 成功導出 ONNX 模型至 `models/hexapod_policy.onnx`。
 - [ ] **M8 渲染（可選）**：`record_trajectory.py` → `blender_cinematic.py`，步態匯入 Blender 完成渲染。

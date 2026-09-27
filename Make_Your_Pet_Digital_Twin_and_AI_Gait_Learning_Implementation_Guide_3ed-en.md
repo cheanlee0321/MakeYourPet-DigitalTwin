@@ -82,25 +82,50 @@ flowchart TD
 
 ### 1.4 Project File Structure
 
-```
-Make Your Pet Digital Twin/
-├── models/
-│   ├── hexapod.xml              # MuJoCo physics model description file
-│   ├── best_model/
-│   │   └── best_model.zip       # Best weights saved during training
-│   ├── hexapod_final_policy.zip # Final weights at end of training
-│   └── hexapod_policy.onnx      # Exported lightweight neural network
-├── MakeYourPet-hexapod/         # Open-source hardware assets (STL, wiring diagrams, etc.)
-├── tripod_kinematics.py         # Tripod gait feedforward kinematics
-├── hexapod_env.py               # Gymnasium reinforcement learning environment
-├── train.py                     # PPO training main script
-├── verify_command_tracking.py   # Command tracking verification
-├── demo.py                      # 3D keyboard real-time control
-├── export_onnx.py               # ONNX model export
-├── record_trajectory.py         # Gait trajectory recording (for Blender)
-├── blender_cinematic.py         # Blender scene auto-construction
-├── make_video.py                # Rendered frame composition to MP4
-└── hexapod_rl_env/              # Python virtual environment
+```text
+Make Your Pet - Digital Twin/
+├── MakeYourPet-DigitalTwin/           # Digital Twin core source code & trained models
+│   ├── models/                        # MuJoCo XML models, textures & trained RL weights
+│   │   ├── hexapod.xml                # MuJoCo core model (18-DOF, STL visuals, capsule colliders, 3D terrain)
+│   │   ├── one_leg.xml                # Single-leg prototype debug model
+│   │   ├── best_model/                # Best weights saved during training (best_model.zip)
+│   │   ├── hexapod_final_policy.zip   # Latest converged PPO policy weights
+│   │   ├── hexapod_policy.onnx        # Exported lightweight neural network (1.9 KB)
+│   │   ├── hexapod_policy.onnx.data   # ONNX external tensor weight data
+│   │   ├── arena_10x10_preview.png    # Terrain arena preview
+│   │   └── wood.png                   # Ground texture
+│   │
+│   ├── KnownIssue/                    # In-depth technical root-cause guides & diagnostic records
+│   │   ├── coordinate_transformation_issues.md # CAD coordinate conflicts & reverse-engineering fixes
+│   │   ├── training_issues.md                  # Top-10 RL training errors & solutions
+│   │   └── DEBUG/                              # Debug records, scripts & calibration notes
+│   │       └── test_kinematics_openloop.py     # Open-loop kinematics verification script
+│   │
+│   ├── tripod_kinematics.py           # Analytical tripod gait feedforward generator (Human Prior Engine)
+│   ├── hexapod_env.py                 # Gymnasium reinforcement learning environment wrapper
+│   ├── train.py                       # PPO multi-process vectorized parallel training main script
+│   ├── verify_command_tracking.py     # 5-scenario closed-loop command tracking benchmark
+│   ├── demo.py                        # Game-grade 3D real-time remote control workstation
+│   ├── export_onnx.py                 # PPO Actor → ONNX lightweight model exporter
+│   ├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
+│   ├── record_trajectory.py           # 50 FPS physics trajectory recorder (for Blender)
+│   ├── blender_cinematic.py           # Blender 5.2 automated cinematic render script
+│   ├── make_video.py                  # Trajectory frame renderer & video synthesizer
+│   │
+│   ├── experiment_log.md              # Project experiment log & full milestone tracker
+│   ├── KnownIssue.md                  # Global known-issues quick reference
+│   ├── LICENSE                        # Apache 2.0 License
+│   └── hexapod_rl_env/                # Python virtual environment (created inside this folder)
+│
+├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD
+│   └── hexapod-main/                  # Official MakeYourPet repository assets (STEP, STL, Chipo, etc.)
+│
+├── Demo Recording 2026-09-27.mp4      # Full video recording (1m 15s)
+├── demo_locomotion.gif                # Autonomous blind locomotion demo GIF
+├── Demo1.png / Demo2.png              # Perspective and front view renders
+├── Make_Your_Pet_Digital_Twin_and_AI_Gait_Learning_Implementation_Guide_3ed-en.md  # Implementation guide (EN)
+├── Make_Your_Pet_數位孿生與AI步態學習實作計畫3ed-zh.md                                # Implementation guide (ZH)
+└── README.md                          # Repository main documentation
 ```
 
 ---
@@ -126,9 +151,13 @@ Enter `Y` to confirm when prompted.
 
 ### Step 0-2: Create a Python Virtual Environment
 
-Run the following from the project root directory:
+First navigate into the Digital Twin core project directory `MakeYourPet-DigitalTwin` (all subsequent simulation, training, control, and export commands are run from inside this directory):
 
 ```powershell
+# 1. Enter the Digital Twin core project directory
+cd MakeYourPet-DigitalTwin
+
+# 2. Create and activate Python virtual environment
 python -m venv hexapod_rl_env
 .\hexapod_rl_env\Scripts\Activate.ps1
 ```
@@ -204,7 +233,7 @@ This approach yields good visuals while keeping physics computation fast.
 
 ### 3.4 Physics Model Description File: `models/hexapod.xml`
 
-Key configuration sections are shown below (for the full file, refer to `models/hexapod.xml` in the project):
+Key configuration sections are shown below (the full file is located at `MakeYourPet-DigitalTwin/models/hexapod.xml`):
 
 ```xml
 <mujoco model="makeyourpet_hexapod">
@@ -254,7 +283,10 @@ Key configuration sections are shown below (for the full file, refer to `models/
 </mujoco>
 ```
 
-After building the model, verify the assembly using the MuJoCo built-in viewer:
+> [!NOTE]
+> Since simulation and training scripts run with `MakeYourPet-DigitalTwin/` as the working directory, relative asset paths like `file="../MakeYourPet-hexapod/hexapod-main/STL/frame.stl"` correctly resolve to the adjacent `MakeYourPet-hexapod/` hardware assets directory.
+
+After building the model, verify the assembly using the MuJoCo built-in viewer (run from inside the `MakeYourPet-DigitalTwin` directory):
 
 ```powershell
 python -m mujoco.viewer --mjcf=models/hexapod.xml
@@ -270,7 +302,7 @@ The tripod gait is the most common walking pattern for insects: the 6 legs are d
 
 ### 4.1 `tripod_kinematics.py`
 
-Create this file in the project root directory:
+Located at `MakeYourPet-DigitalTwin/tripod_kinematics.py` (create or edit this file in the `MakeYourPet-DigitalTwin/` directory):
 
 ```python
 """
@@ -357,7 +389,11 @@ class TripodKinematics:
 
 ### 4.2 Verifying the Feedforward Kinematics
 
-Use `test_kinematics_openloop.py` to confirm that the robot can travel steadily forward at approximately 0.26 m/s using only mathematical formulas, with no RL involved.
+Run `KnownIssue/DEBUG/test_kinematics_openloop.py` from the `MakeYourPet-DigitalTwin/` directory to confirm that the robot can travel steadily forward at approximately 0.26 m/s using only mathematical formulas, with no RL involved:
+
+```powershell
+python KnownIssue/DEBUG/test_kinematics_openloop.py
+```
 
 ---
 
@@ -382,7 +418,7 @@ The neural network outputs 18 values (range [-1, 1]), which are multiplied by `r
 
 ### 5.3 Environment Source Code: `hexapod_env.py`
 
-Create this file in the project root directory:
+Located at `MakeYourPet-DigitalTwin/hexapod_env.py` (create or edit this file in the `MakeYourPet-DigitalTwin/` directory):
 
 ```python
 """
@@ -688,6 +724,8 @@ class HexapodEnv(gym.Env):
 
 ### 6.1 Training Main Script: `train.py`
 
+Located at `MakeYourPet-DigitalTwin/train.py`.
+
 ```python
 """
 train.py
@@ -829,6 +867,8 @@ if __name__ == "__main__":
 
 ### 6.2 Starting Training
 
+Run from inside the `MakeYourPet-DigitalTwin/` directory:
+
 ```powershell
 python train.py --timesteps 100000 --num-envs 12
 ```
@@ -855,7 +895,7 @@ python train.py --timesteps 100000 --num-envs 12
 
 ### 7.1 Command Tracking Verification: `verify_command_tracking.py`
 
-Verify AI performance under different commands:
+Located at `MakeYourPet-DigitalTwin/verify_command_tracking.py`. Run from the `MakeYourPet-DigitalTwin/` directory to verify AI performance under different commands:
 
 ```powershell
 python verify_command_tracking.py
@@ -869,6 +909,8 @@ The test covers 5 scenarios: braking/standby, forward cruise, in-place left turn
 - Braking → velocity converges to 0.000 m/s
 
 ### 7.2 Keyboard Real-Time Control: `demo.py`
+
+Located at `MakeYourPet-DigitalTwin/demo.py`. Run from the `MakeYourPet-DigitalTwin/` directory:
 
 ```powershell
 python demo.py
@@ -888,6 +930,8 @@ Opens a MuJoCo 3D window where the robot can be controlled with the keyboard:
 | `Ctrl + Mouse Drag` | Apply external force to the robot to test balance |
 
 ### 7.3 Export ONNX Model: `export_onnx.py`
+
+Located at `MakeYourPet-DigitalTwin/export_onnx.py`.
 
 ```python
 """
@@ -957,11 +1001,13 @@ if __name__ == "__main__":
     main()
 ```
 
+Run from the `MakeYourPet-DigitalTwin/` directory:
+
 ```powershell
 python export_onnx.py
 ```
 
-The exported ONNX file is approximately 1.9 KB and can run on embedded boards such as Raspberry Pi, ESP32-S3, or Servo 2040.
+The exported ONNX file is saved at `models/hexapod_policy.onnx` (within `MakeYourPet-DigitalTwin/`, approximately 1.9 KB) and can run on embedded boards such as Raspberry Pi, ESP32-S3, or Servo 2040.
 
 ---
 
@@ -971,17 +1017,21 @@ This stage is optional. If you need to produce a demo video or still shots, you 
 
 ### 8.1 Record Gait Trajectory
 
+Run `record_trajectory.py` from the `MakeYourPet-DigitalTwin/` directory:
+
 ```powershell
 python record_trajectory.py --duration 5.0 --motion combo
 ```
 
 `--motion` options: `combo` (multi-motion sequence), `forward` (straight walk), `sprint` (sprint), `turn` (rotation).
 
-Output files:
+Output files (generated in `MakeYourPet-DigitalTwin/`):
 - 11 `.obj` mesh files in the `blender_exports/` directory
 - `gait_trajectory.json`: 250 frames (5 s × 50 FPS) of pose data
 
 ### 8.2 Auto-Build the Blender Scene
+
+Run `blender_cinematic.py` from the `MakeYourPet-DigitalTwin/` directory:
 
 ```powershell
 & "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --python blender_cinematic.py
@@ -1096,17 +1146,23 @@ Fine-tune `yaw_gain` in `tripod_kinematics.py`, or increase the lateral sliding 
 
 Those are editing overlay markers (camera frustum, constraint lines) and will not appear in the final render. Press `Numpad 0` to enter camera view, or press `Shift + Alt + Z` to hide all overlays.
 
+> [!TIP]
+> For more in-depth root-cause analysis and debugging records, refer to:
+> - [CAD Geometry & Coordinate Conflicts](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
+> - [AI RL Training Issues & Fixes](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
+> - [Master Known Issues Reference](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue.md)
+
 ---
 
 ## 11. Milestone Checklist
 
 Complete each step in order and check it off when done:
 
-- [ ] **M1 Environment Ready**: Virtual environment created; PyTorch and MuJoCo installation verified.
-- [ ] **M2 Physics Model Assembled**: `models/hexapod.xml` complete; confirm correct part assembly and mouse drag interaction with `python -m mujoco.viewer --mjcf=models/hexapod.xml`.
-- [ ] **M3 Feedforward Verified**: `tripod_kinematics.py` complete; open-loop test confirms the robot can travel forward at approximately 0.26 m/s.
+- [ ] **M1 Environment Ready**: Virtual environment created inside `MakeYourPet-DigitalTwin/`; PyTorch and MuJoCo installation verified.
+- [ ] **M2 Physics Model Assembled**: `models/hexapod.xml` complete; confirm correct part assembly and mouse drag interaction with `python -m mujoco.viewer --mjcf=models/hexapod.xml` (run from `MakeYourPet-DigitalTwin/`).
+- [ ] **M3 Feedforward Verified**: `tripod_kinematics.py` complete; open-loop test (`KnownIssue/DEBUG/test_kinematics_openloop.py`) confirms the robot can travel forward at approximately 0.26 m/s.
 - [ ] **M4 Environment Wrapped**: `hexapod_env.py` complete; 67-dimensional observation and 18-dimensional residual action space functioning correctly.
-- [ ] **M5 Training Complete**: Run `python train.py --timesteps 100000 --num-envs 12`; evaluation return exceeds 8,000.
-- [ ] **M6 Command Tracking Verified**: Run `verify_command_tracking.py`; forward, turning, and braking commands all respond correctly.
-- [ ] **M7 Control & Export**: `demo.py` controllable via keyboard; `export_onnx.py` successfully exports the ONNX model.
+- [ ] **M5 Training Complete**: Run `python train.py --timesteps 100000 --num-envs 12` inside `MakeYourPet-DigitalTwin/`; evaluation return exceeds 8,000.
+- [ ] **M6 Command Tracking Verified**: Run `verify_command_tracking.py` from `MakeYourPet-DigitalTwin/`; forward, turning, and braking commands all respond correctly.
+- [ ] **M7 Control & Export**: `demo.py` controllable via keyboard; `export_onnx.py` successfully exports the ONNX model to `models/hexapod_policy.onnx`.
 - [ ] **M8 Rendering (Optional)**: `record_trajectory.py` → `blender_cinematic.py`; gait imported into Blender and rendering complete.
