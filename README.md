@@ -242,33 +242,6 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 ```text
 Make Your Pet - Digital Twin/
 ├── MakeYourPet-DigitalTwin/           # Digital Twin core source code & trained models
-│   ├── models/                        # MuJoCo XML models, textures & trained RL weights
-│   │   ├── hexapod.xml                # MuJoCo core model (18-DOF, STL visuals, capsule colliders, 3D terrain)
-│   │   ├── one_leg.xml                # Single-leg 3-axis prototype debug model
-│   │   ├── hexapod_final_policy.zip   # Latest converged PPO policy weights
-│   │   ├── hexapod_policy.onnx        # Lightweight ONNX edge inference model (1.9 KB)
-│   │   ├── hexapod_policy.onnx.data   # ONNX external tensor weight data
-│   │   └── best_model/                # EvalCallback best-ever weights
-│   │
-│   ├── KnownIssue/                    # In-depth technical root-cause guides
-│   │   ├── coordinate_transformation_issues.md  # CAD coordinate conflicts & reverse-engineering fixes
-│   │   ├── training_issues.md                   # Top-10 RL training errors & solutions
-│   │   └── DEBUG/                               # Debug records and diagnostic notes
-│   │
-│   ├── hexapod_env.py                 # Gymnasium wrapper (67D obs, 18D action, 50Hz, 3D heightfield)
-│   ├── tripod_kinematics.py           # Analytical tripod gait feedforward generator (Human Prior Engine)
-│   ├── train.py                       # PPO multi-process vectorized parallel training main script
-│   ├── demo.py                        # Game-grade 3D real-time remote control workstation
-│   ├── verify_command_tracking.py     # 5-scenario closed-loop command tracking benchmark
-│   ├── export_onnx.py                 # PPO Actor → ONNX lightweight model exporter
-│   ├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
-│   ├── record_trajectory.py           # 50 FPS physics trajectory recorder
-│   ├── make_video.py                  # Trajectory frame renderer & video synthesizer
-│   ├── blender_cinematic.py           # Blender 5.2 automated cinematic render script
-│   │
-│   ├── experiment_log.md              # Project experiment log & full milestone progress tracker
-│   ├── KnownIssue.md                  # Global known-issues quick reference
-│   └── LICENSE                        # MIT License
 │
 ├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD
 │   └── hexapod-main/                  # Official MakeYourPet repository assets (STEP, STL, Chipo, etc.)
@@ -550,33 +523,6 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 ```text
 Make Your Pet - Digital Twin/
 ├── MakeYourPet-DigitalTwin/           # 數位孿生核心代碼庫與訓練權重
-│   ├── models/                        # MuJoCo 物理模型、材質貼圖與 RL 權重
-│   │   ├── hexapod.xml                # MuJoCo 核心模型 (18-DOF, STL 視覺, 膠囊碰撞, 3D 地形)
-│   │   ├── one_leg.xml                # 單腿 3 軸原型調試模型
-│   │   ├── hexapod_final_policy.zip   # 訓練收斂之最新 PPO 策略權重
-│   │   ├── hexapod_policy.onnx        # 輕量化 ONNX 邊緣推論模型 (1.9 KB)
-│   │   ├── hexapod_policy.onnx.data   # ONNX 外部張量權重資料
-│   │   └── best_model/                # EvalCallback 自動保存之歷史最優權重
-│   │
-│   ├── KnownIssue/                    # 完整避坑指南與專題技術文件
-│   │   ├── coordinate_transformation_issues.md  # CAD 坐標系衝突與逆向修復推導
-│   │   ├── training_issues.md                   # 10 大強化學習訓練錯誤與解決對策
-│   │   └── DEBUG/                               # 調試記錄與診斷筆記
-│   │
-│   ├── hexapod_env.py                 # Gymnasium 封裝環境 (67D 觀測, 18D 動作, 50Hz, 3D 高度場)
-│   ├── tripod_kinematics.py           # 解析三角步態前饋產生器 (Human Prior Engine)
-│   ├── train.py                       # PPO 多進程向量化並行訓練主程式
-│   ├── demo.py                        # 電玩級 3D 即時遙控與變速工作台
-│   ├── verify_command_tracking.py     # 5 大運動情境閉環跟隨基準驗證
-│   ├── export_onnx.py                 # PPO Actor 轉 ONNX 輕量模型導出器
-│   ├── generate_hexapod_xml.py        # 18 自由度 XML 動態生成與參數校準工具
-│   ├── record_trajectory.py           # 50 FPS 物理運動軌跡錄製器
-│   ├── make_video.py                  # 離屏軌跡渲染與 MP4 影片合成器
-│   ├── blender_cinematic.py           # Blender 5.2 自動化影視級渲染腳本
-│   │
-│   ├── experiment_log.md              # 專案實驗日誌與全里程碑進度追蹤
-│   ├── KnownIssue.md                  # 全域已知問題速查手冊
-│   └── LICENSE                        # MIT 開源授權條款
 │
 ├── MakeYourPet-hexapod/               # 原廠 3D 列印 STL 與硬體 CAD 零件庫
 │   └── hexapod-main/                  # MakeYourPet 官方倉庫資源 (STEP, STL, Chipo 等)

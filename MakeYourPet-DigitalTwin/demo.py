@@ -7,14 +7,20 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import time
+import math
 import argparse
 import ctypes
 import numpy as np
 import mujoco
 import mujoco.viewer
 from stable_baselines3 import PPO
+
+_root_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_root_dir, "train_walking"))
+sys.path.insert(0, os.path.join(_root_dir, "train_jumping"))
+
 from hexapod_env import HexapodEnv
-from jump_controller import JumpController
+from jump_controller import JumpController, JumpState
 
 # Windows 虛擬按鍵碼 (Virtual Key Codes)
 user32 = ctypes.windll.user32
@@ -82,6 +88,8 @@ def parse_args():
                         help="自訂大腿抬升幅度 (rad，預設越野超高抬腿: 0.55 rad 約 31.5 度)")
     parser.add_argument("--lift-tibia", type=float, default=None,
                         help="自訂小腿屈折幅度 (rad，預設越野超高抬腿: 0.36 rad 約 20.6 度)")
+    parser.add_argument("--jump-model", type=str, default=None,
+                        help="欲載入的立定跳躍殘差模型路徑 (若未指定，會自動嘗試載入 models/jump_best_model/best_model.zip)")
     return parser.parse_args()
 
 def print_controls():
@@ -187,9 +195,30 @@ def main():
     # 立定跳躍控制器 (配備瞬間過載脈衝爆發與伸足著地防腹部觸地保護)
     jump_ctrl = JumpController(dt=env.dt, model=env.model, enable_burst=True)
 
+    # 載入立定跳躍殘差強化學習模型 (若有)
+    candidate_jump_paths = [
+        args.jump_model,
+        os.path.join("models", "jump_best_model", "best_model.zip"),
+        os.path.join("models", "jump_final_policy.zip"),
+    ]
+    jump_model_path = None
+    for jp in candidate_jump_paths:
+        if jp and os.path.exists(jp):
+            jump_model_path = jp
+            break
+
+    jump_model = None
+    if jump_model_path:
+        jump_model = PPO.load(jump_model_path, device="cpu")
+        jump_status_str = f"智慧閉環殘差策略 ({jump_model_path})"
+    else:
+        jump_status_str = "基準數字 5 開環姿態 (待訓練完畢自動加載)"
+    prev_jump_action = np.zeros(18, dtype=np.float32)
+
     # 印出說明文字
     print_controls()
-    print(f"載入權重: {model_path}")
+    print(f"載入步態權重: {model_path}")
+    print(f"立定跳躍模式: 【{jump_status_str}】")
     terrain_desc = f"{args.terrain} (起伏: ±{args.terrain_height*100:.1f} cm)" if args.terrain != 'flat' else 'flat (平坦地面)'
     print(f"地貌設定: 【{terrain_desc}】 | 初始速度: 【{current_speed} 檔 {SPEED_PROFILES[current_speed]['name']}】 (步頻: 1.5 Hz) | 初始姿態: 【{POSTURE_PROFILES[is_offroad]['name']}】 | 鏡頭自動跟隨: {'開啟' if camera_tracking else '關閉'}\n")
 
@@ -341,8 +370,70 @@ def main():
             if jump_ctrl.is_jumping:
                 current_offsets = (POSTURE_PROFILES[is_offroad]["offset_hip"], POSTURE_PROFILES[is_offroad]["offset_tibia"])
                 q_jump = jump_ctrl.step(current_posture_offsets=current_offsets, data=env.data)
-                obs, reward, terminated, truncated, info = env.step(np.zeros(18, dtype=np.float32), override_target_angles=q_jump)
+                if q_jump is None:
+                    q_jump = env.default_joint_angles.copy()
+
+                if jump_model is not None:
+                    # 構建 78 維跳躍殘差專屬觀測空間
+                    quat = env.data.qpos[3:7]
+                    w, x, y, z = quat
+                    roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+                    pitch = math.asin(np.clip(2 * (w * y - z * x), -1.0, 1.0))
+                    R = env.data.xmat[env.trunk_id].reshape(3, 3)
+                    proj_gravity = R.T @ np.array([0.0, 0.0, -1.0], dtype=np.float32)
+                    omega = env.data.qvel[3:6]
+                    v_body = R.T @ env.data.qvel[0:3]
+                    local_ground_z = env._get_terrain_height_at(float(env.data.qpos[0]), float(env.data.qpos[1]))
+                    rel_height = float(env.data.qpos[2] - local_ground_z)
+                    current_joint_angles = env.data.qpos[7:25]
+                    joint_error = current_joint_angles - q_jump
+                    joint_vel = env.data.qvel[6:24] * 0.1
+
+                    fsm_onehot = np.zeros(5, dtype=np.float32)
+                    fsm_onehot[jump_ctrl.state] = 1.0
+                    t_cur = jump_ctrl.state_time
+                    ratio = min(1.0, t_cur / 0.60)
+
+                    feet_contacts = np.zeros(6, dtype=np.float32)
+                    for c in range(env.data.ncon):
+                        con = env.data.contact[c]
+                        for leg_i, tip_id in enumerate(env.tip_geom_ids):
+                            if (con.geom1 == tip_id and con.geom2 == env.ground_id) or (con.geom2 == tip_id and con.geom1 == env.ground_id):
+                                feet_contacts[leg_i] = 1.0
+
+                    obs_jump = np.concatenate([
+                        np.array([roll, pitch], dtype=np.float32),
+                        proj_gravity.astype(np.float32),
+                        omega.astype(np.float32),
+                        v_body.astype(np.float32),
+                        np.array([rel_height], dtype=np.float32),
+                        joint_error.astype(np.float32),
+                        joint_vel.astype(np.float32),
+                        prev_jump_action.astype(np.float32),
+                        fsm_onehot,
+                        np.array([ratio], dtype=np.float32),
+                        feet_contacts
+                    ]).astype(np.float32)
+
+                    jump_action, _ = jump_model.predict(obs_jump, deterministic=True)
+                    fsm_state = jump_ctrl.state
+                    if fsm_state == JumpState.THRUST:
+                        eff_scale = 0.025
+                    elif fsm_state == JumpState.CROUCH:
+                        eff_scale = 0.040
+                    elif fsm_state == JumpState.FLIGHT:
+                        eff_scale = 0.150
+                    elif fsm_state == JumpState.LANDING:
+                        eff_scale = 0.180
+                    else:
+                        eff_scale = 0.060
+                    q_override = q_jump + eff_scale * jump_action
+                else:
+                    q_override = q_jump
+
+                obs, reward, terminated, truncated, info = env.step(np.zeros(18, dtype=np.float32), override_target_angles=q_override)
                 if not jump_ctrl.is_jumping:
+                    prev_jump_action = np.zeros(18, dtype=np.float32)
                     print("  [動作] 🛬 【立定跳躍完成】已成功平穩著地並恢復常態站姿！\n")
             else:
                 action, _ = model.predict(obs, deterministic=not args.stochastic)

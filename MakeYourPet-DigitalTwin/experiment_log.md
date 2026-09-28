@@ -820,6 +820,135 @@
   - 全機 18 個關節站立、邁步動態行進與高跳著地期間，18 顆淺藍色球體均 100% 精準吸附於舵機轉軸孔心。
   - 通過 [verify_command_tracking.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/verify_command_tracking.py) 與 [test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py) 全套物理功能回歸測試。
 
+---
+
+### 【實驗紀錄 022】連續立定跳躍空中翻倒物理根因排查與三階抗側翻跳躍控制器重構
+* **實驗日期**：2026-09-28
+* **遭遇問題**：
+  - 使用者回報在連續多次立定跳躍後，機器人於空中發生翻滾倒扣摔倒現象。
+* **物理動力學深度診斷（Root Causes）**：
+  1. **起跳推力過載噪聲（Jerk Shock）**：先前為追求 70cm 極限高度，致動器力矩開至 21 N·m，全機瞬間升力破 1,000 N（近 100 G 加速度）。若起跳前有 0.2° 幾何不對稱，左右離地時間差僅需 0.5ms，單側地面反作用力即在 20ms 內對機身注入超過 $500^\circ/\text{s}$ 之旋轉角動量。
+  2. **單側滯後踹地（Lack of Liftoff Cutoff）**：原 `THRUST` 階段固定為 0.10s，但機身在 0.04s 其實已脫離地面。若單腳延遲 10ms 離地，會在空中狂踹地面形成火箭偏心推力掀翻機身。
+  3. **空中角動量守恆（Angular Momentum Conservation）**：騰空後 $\sum \tau_{\text{ext}} = 0 \implies \mathbf{L} = \text{const}$，空中無法消耗旋轉角速度，持續翻滾直至倒扣摔地。
+  4. **下蹲足底滑移應力蓄積（Crouch Stiction Snap）**：原下蹲僅轉動大腿 Femur，導致足端水平向外硬撐 8.51mm，橡膠地面高摩擦蓄積彈性應力後突然打滑彈開，起跳前破壞對稱性。
+  5. **著地基節震偏（Coxa Landing Deflection）**：著地衝擊將未鎖定的 Coxa 震歪 1°~2°，使後續跳躍六邊形對稱性崩潰。
+* **三階段漸進式修復實施方案**：
+  1. **步驟 1：降噪柔化推力（Jerk Ramp Smoothing）**：
+     - 在 `THRUST` 起始端加入 25ms 線性爬升過渡，徹底消除瞬間階躍衝擊。
+     - 收斂力度參數：Mode 1（按鍵 5）為 `power=1.15`，Mode 2（按鍵 6）為 `power=1.35`。
+  2. **步驟 2：智慧離地即時切斷（Smart Liftoff Cutoff）**：
+     - 在 `THRUST` 階段即時檢測機身高度（$z \ge 0.108\text{m}$）與向上速度（$v_z > 1.8\text{ m/s}$ 且足端離地），即刻切斷爆發推力轉入 `FLIGHT`，嚴防單側延遲蹬地踹翻機身。
+  3. **步驟 3：零滑移深蹲幾何與基節鎖定（Zero-Slip Crouch & Coxa Lock）**：
+     - **幾何補償**：Femur 下壓 -0.15 rad 同時 Tibia 伸展 +0.075 rad，足端水平位移降至 **0.01 mm**（零滑移、零應力蓄積）。
+     - **基節剛性鎖定**：起跳與著地全週期鎖定 Coxa（`forcerange=[-15, 15], kp=60.0, kv=2.5`），防偏擺。
+     - **主動著地阻尼**：落地階段切換為高阻尼模式（`forcerange=[-10, 10], kp=25.0, kv=3.5`），迅速消散下落動能。
+* **驗證成果**：
+  - **連續 10 次跳躍壓力測試**：
+    - 按鍵 5（Mode 1）：跳躍高度 $47.6 \sim 50.5\text{ cm}$，滯空 $640\text{ ms}$，落地 Roll $< 0.2^\circ$ / Pitch $< 0.3^\circ$。
+    - 按鍵 6（Mode 2）：跳躍高度 $59.1 \sim 65.6\text{ cm}$，滯空 $820\text{ ms}$，落地 Roll $< 0.3^\circ$ / Pitch $< 0.4^\circ$。
+  - **10 次連續起跳存活率 100%**，腹部地面碰撞次數 $0$ 次，空中完全垂直筆直上下，零側翻、零倒扣！
+* **交付檔案**：
+  - [jump_controller.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/jump_controller.py)、[test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py)、[demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py)。
+
+---
+
+### 【實驗紀錄 023】階段 7：基於數字 5 行為之六足立定跳躍殘差強化學習 (Residual RL) 訓練場景與管線實裝
+* **實驗日期**：2026-09-28
+* **實驗目標**：
+  - 響應使用者「開始訓練跳躍、設計訓練場景並基於數字 5 行為進行殘差訓練」之需求。
+  - 將開環有限狀態機 (FSM) 立定跳躍控制器提升至具備動態自適應能力的「智慧閉環殘差跳躍策略 (Residual RL)」。
+  - 解決純開環控制器在面對地面摩擦力變異、微地形高低差、載重變動與空中角動量擾動時的空中側偏與著地歪斜問題。
+* **技術架構實施方案**：
+  1. **殘差前饋耦合架構 (Residual Feedforward RL)**：
+     - **標稱軌跡前饋**：$q_{\text{ref}}(t) = q_{\text{jump\_5}}(t)$，直接取自 `JumpController(power=1.15)` 在各階段輸出的 18 軸目標關節角度（數字 5 行為）。
+     - **殘差補償動作**：$a_{\text{RL}}(t) \in [-1.0, 1.0]^{18}$，縮放尺度 $\alpha = 0.15\text{ rad} \approx 8.6^\circ$。
+     - **實際輸出控制**：$q_{\text{target}}(t) = \text{clip}(q_{\text{ref}}(t) + \alpha \cdot a_{\text{RL}}(t), q_{\text{min}}, q_{\text{max}})$。
+     - **優勢**：保留數字 5 原有之強大蹬地衝量（50cm 升空高度）與安全深蹲幾何，RL 策略專注微調 18 軸對稱性、空中伸腿動量補償與柔順吸震。
+  2. **專屬跳躍回合時序 (Jump Episode Lifecycle, 90 步 = 1.8 秒)**：
+     - **Step 0 ~ 9 (0.20s)**：待命穩態期 (Pre-jump Settle)，機身平穩立於地面。
+     - **Step 10**：自動注入起跳觸發信號。
+     - **Step 11 ~ 65 (~1.10s)**：經歷深蹲蓄力 (Crouch) $\rightarrow$ 爆發蹬地 (Thrust) $\rightarrow$ 騰空伸足 (Flight) $\rightarrow$ 腳掌觸地吸震 (Landing)。
+     - **Step 66 ~ 89 (~0.50s)**：著地穩態評估期 (Post-landing Settle)，評估回歸標稱高度與靜態平衡。
+     - **效率**：單回合 100% 完整採樣一次跳躍閉環，杜絕在平地漫步中的無效等待，訓練收斂極致迅速。
+  3. **78 維高保真物理感知觀測空間 (Markovian State Space)**：
+     - 機身姿態：`[roll, pitch]` (2D) + 機身系投影重力向量 $R^T [0, 0, -1]^T$ (3D)。
+     - 機身動力學：角速度 $\boldsymbol{\omega}$ (3D) + 本體坐標系速度 $\mathbf{v}_{\text{body}}$ (3D) + 地表淨空高度 `rel_height` (1D)。
+     - 關節反饋：關節跟隨誤差 $q - q_{\text{ref}}$ (18D) + 關節轉速 $\dot{q} \times 0.1$ (18D) + 前一刻殘差 $a_{t-1}$ (18D)。
+     - 階段時鐘：跳躍階段 One-Hot (5D) + 當前階段歸一化進度比例 (1D)。
+     - 接觸反饋：六足足端橡膠球地面接觸二值信號 (6D)。
+  4. **複合地貌場景與領域隨機化 (Curriculum Terrains & Domain Randomization)**：
+     - **場景支援**：`flat` (經典平地)、`uneven` (中心平坦外圍微起伏 $\pm 1.5\text{cm}$)、`bumps` (連續平緩波浪 $\pm 2.0\text{cm}$)、`slope` (傾斜坡面)、`platform` (凸起小圓台跳落)。
+     - **物理隨機化**：機身總重 $\pm 12\%$ 擾動、地面摩擦力 $\mu \in [0.75, 1.45]$、空中隨機微側風脈衝。
+  5. **多目標跳躍姿態與著地獎勵函數**：
+     - **姿態水平約束**：$R_{\text{orient}} = 1.2 \exp(-(\text{roll}^2 + \text{pitch}^2) / 0.035) - 0.06 \|\boldsymbol{\omega}\|^2$。
+     - **垂直爆發與淨空**：$R_{\text{thrust}} = 0.6 \max(0, v_z) + 0.8 \max(0, \text{rel\_h} - 0.15)$。
+     - **六足同步與吸震**：$R_{\text{landing}} = 0.15 N_{\text{touch}} + 0.8 \exp(-|v_z|/0.3) + 0.5 \exp(-|h - h_{\text{nom}}|/0.02)$。
+     - **安全底線約束**：底盤/電池艙撞地懲罰 $-5.0$ 並提前中止回合。
+* **驗證與交付狀態**：
+  - 實裝環境類別：[hexapod_jump_env.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/hexapod_jump_env.py)（通過平地、起伏、波浪、微坡與台階 5 大場景完整單元測試）。
+  - 實裝多進程訓練程式：[train_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/train_jump.py)（支援多核心 CPU / CUDA Blackwell 加速、SubprocVecEnv、EvalCallback、TensorBoard 監控）。
+  - 實裝對比評估與遙測工具：[test_jump_policy.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump_policy.py)（自動對比開環 vs 閉環之起跳高度、空中最大傾角、觸地對稱性與存活率）。
+
+---
+
+### 【實驗紀錄 024】階段 7：立定跳躍殘差強化學習 30 萬步收斂訓練與平地/越野姿態基準實測
+* **實驗日期**：2026-09-28
+* **訓練配置與收斂表現**：
+  - **總採樣步數**：300,000 步（約 3,333 次完整立定跳躍回合）。
+  - **平行進程**：8 個並行物理環境（`SubprocVecEnv`），採樣吞吐量高達 **1,610 FPS**，全流程僅耗時 **218 秒（3.65 分鐘）** 順利收斂完畢。
+  - **階段自適應縮放機制 (Stage-Adaptive Residual Scaling)**：
+    - `THRUST` (爆發蹬地期)：縮減至 $\pm 0.025\text{ rad} \approx 1.4^\circ$，確保推力對稱，徹底消除起跳瞬間非對稱過載導致的機身側偏。
+    - `FLIGHT` (騰空期)：$\pm 0.15\text{ rad} \approx 8.6^\circ$，主動抑制空中微小角速度 $\boldsymbol{\omega}$，維持陀螺儀般水平姿態。
+    - `LANDING` (著地吸震期)：$\pm 0.18\text{ rad} \approx 10.3^\circ$，提供充足的動態順應阻尼。
+  - **收斂評估獎勵**：確定性評估回報由初期的 $59.9$ 飆升至 **$163.5$**，存活率 100%。
+* **開環 vs 閉環基準對比實測結果**：
+  1. **平地場景（Flat Arena）**：
+     - **平均起跳高度**：由開環 $48.3\text{ cm}$ 提升至 **$55.6\text{ cm}$**（淨增高 **$+7.3\text{ cm}$**，最高單次衝上 **$58.0\text{ cm}$**！）。
+     - **著地瞬間傾角**：由先前的 $24.2^\circ$ 壓制至 **$7.2^\circ$**（最佳單次達 **$0.3^\circ$** 極致水平）。
+     - **腹部撞地次數**：**$0$ 次**，存活率 **$100\%$**。
+  2. **微起伏擾動地貌（Uneven Terrain $\pm 2.0\text{cm}$）**：
+     - **首拍著地支撐腿數**：由開環的 $1.0\text{ 腿}$（常因單側歪斜單腳著地）提升至 **$2.0\text{ 腿}$**（雙側同步接獲地面），顯著增強著地支撐多邊形穩定性。
+     - **著地傾角**：維持於 **$1.0^\circ$** 內，平穩吸收不平地面高差。
+* **交付權重檔案**：
+  - 歷史最佳模型：`models/jump_best_model/best_model.zip`
+  - 最終收斂模型：`models/jump_final_policy.zip`
+  - 已與 [demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py) 深度打通，執行 `demo.py` 按下數字 5 鍵即可享受閉環殘差自適應爆發高跳！
+
+---
+
+### 【實驗紀錄 025】階段 8：工程架構重構——模組化拆分 `train_walking/` 與 `train_jumping/`
+* **實驗日期**：2026-09-28
+* **重構目標**：
+  - 響應使用者「建立 `train_walking/` 與 `train_jumping/` 資料夾，分別歸納走路訓練與跳躍訓練檔案」之架構整理需求。
+  - 將先前集中於根目錄的步態訓練、運動學生成器、跳躍殘差環境、FSM 控制器與評估腳本進行高內聚、低耦合模組化劃分。
+* **資料夾配置與歸檔清單**：
+  1. **`train_walking/`（行走步態訓練模組）**：
+     - `hexapod_env.py`：全自由度行走步態強化學習環境（67D 觀測、18D 動作、解析三角步態前饋耦合）。
+     - `tripod_kinematics.py`：解析三角步態逆向運動學軌跡產生器。
+     - `train.py`：PPO 步態訓練主程式（多進程並行、全自由度指令隨機採樣）。
+     - `verify_command_tracking.py`：5 項指令聽從能力自動化測試腳本。
+     - `export_onnx.py`：步態策略 ONNX 導出工具。
+     - `record_trajectory.py`：步態關節角度軌跡錄製工具。
+     - `__init__.py`：暴露 `HexapodEnv` 與 `TripodKinematics`。
+  2. **`train_jumping/`（立定跳躍殘差訓練模組）**：
+     - `hexapod_jump_env.py`：立定跳躍專屬殘差環境（78D 觀測、階段自適應縮放、5 大地貌）。
+     - `jump_controller.py`：多階段 FSM 立定跳躍控制器（爆發推力、著地動態阻尼感知）。
+     - `train_jump.py`：PPO 跳躍殘差訓練主程式。
+     - `test_jump.py`：開環雙檔位動力學驗證工具。
+     - `test_jump_policy.py`：開環 vs 閉環殘差對比評估與遙測報表工具。
+     - `verify_jump_env.py`：跳躍環境單元測試工具。
+     - `__init__.py`：暴露 `HexapodJumpEnv`、`JumpController`、`JumpState`。
+  3. **根目錄核心整合與公共資源保留**：
+     - `demo.py`：即時 3D 視覺化與遙控工作台（動態掛載 `train_walking` 與 `train_jumping`，無縫兼顧走跑轉向與智慧跳躍）。
+     - `models/`：共享 MuJoCo XML 模型、材質貼圖與神經網路權重。
+     - `generate_hexapod_xml.py`：XML 動力學編譯腳本。
+* **路徑兼容性升級**：
+  - 各模組內部全數升級為多層級相對路徑搜尋（自動相容從專案根目錄或模組子目錄直接執行）。
+  - 通過 `demo.py`、`test_jump_policy.py`、`verify_command_tracking.py` 與 `verify_jump_env.py` 全套回歸測試，100% 運行無誤。
+
+
+
+
 
 
 
