@@ -14,6 +14,7 @@ import mujoco
 import mujoco.viewer
 from stable_baselines3 import PPO
 from hexapod_env import HexapodEnv
+from jump_controller import JumpController
 
 # Windows 虛擬按鍵碼 (Virtual Key Codes)
 user32 = ctypes.windll.user32
@@ -26,15 +27,19 @@ VK_R     = 0x52  # R 鍵 (重置起點)
 VK_T     = 0x54  # T 鍵 (鏡頭跟隨切換)
 VK_BACK  = 0x08  # Backspace (重置起點)
 
-# 檔位按鍵 (主鍵盤 1~4 與數字小鍵盤 NumPad 1~4)
+# 檔位與動作按鍵 (主鍵盤 1~6 與數字小鍵盤 NumPad 1~6)
 VK_1 = 0x31
 VK_2 = 0x32
 VK_3 = 0x33
 VK_4 = 0x34
+VK_5 = 0x35  # 5 鍵 (50cm 爆發大跳)
+VK_6 = 0x36  # 6 鍵 (70cm 火箭超跳)
 VK_NUMPAD1 = 0x61
 VK_NUMPAD2 = 0x62
 VK_NUMPAD3 = 0x63
 VK_NUMPAD4 = 0x64
+VK_NUMPAD5 = 0x65  # 小鍵盤 5 (50cm 爆發大跳)
+VK_NUMPAD6 = 0x66  # 小鍵盤 6 (70cm 火箭超跳)
 
 # 檔位升降鍵 (+/- 或 [/])
 VK_OEM_PLUS  = 0xBB  # =/+ 鍵
@@ -44,12 +49,17 @@ VK_SUBTRACT  = 0x6D  # 小鍵盤 -
 VK_LBRACKET  = 0xDB  # [ 鍵 (降檔)
 VK_RBRACKET  = 0xDD  # ] 鍵 (升檔)
 
-# 變速檔位定義 (步頻與速度設定檔)
-GEAR_PROFILES = {
-    1: {"name": "ECO 慢步微調/爬坡",  "freq": 1.0, "vx": 0.15, "back": 0.10, "yaw": 0.35, "shift_mult": 1.35},
-    2: {"name": "NORMAL 標準巡航",     "freq": 1.5, "vx": 0.25, "back": 0.18, "yaw": 0.50, "shift_mult": 1.40},
-    3: {"name": "SPORT 敏捷快跑",       "freq": 2.0, "vx": 0.36, "back": 0.22, "yaw": 0.65, "shift_mult": 1.25},
-    4: {"name": "TURBO 極速狂飆",       "freq": 2.5, "vx": 0.45, "back": 0.25, "yaw": 0.75, "shift_mult": 1.20},
+# 速度檔位定義 (調節腳步移動頻率與目標巡航速度)
+SPEED_PROFILES = {
+    1: {"name": "ECO 慢步微調/爬坡", "freq": 1.0, "vx": 0.15, "back": 0.10, "yaw": 0.35, "shift_mult": 1.35},
+    2: {"name": "NORMAL 標準巡航",    "freq": 1.5, "vx": 0.25, "back": 0.18, "yaw": 0.50, "shift_mult": 1.40},
+    3: {"name": "TURBO 極速狂飆",      "freq": 2.5, "vx": 0.45, "back": 0.25, "yaw": 0.75, "shift_mult": 1.20},
+}
+
+# 姿態模式定義 (透過 4 鍵獨立 Toggle 開關切換，不影響 1~3 檔速度頻率)
+POSTURE_PROFILES = {
+    False: {"name": "一般基準姿態",         "offset_hip": 0.0, "offset_tibia": 0.0},
+    True:  {"name": "OFFROAD 越野挺身姿態", "offset_hip": np.deg2rad(10.0), "offset_tibia": np.deg2rad(10.0)},
 }
 
 def is_key_down(vk_code: int) -> bool:
@@ -66,8 +76,12 @@ def parse_args():
                         help="關閉鏡頭自動跟隨機器人")
     parser.add_argument("--terrain", type=str, default="park", choices=["flat", "bumps", "blocks", "park", "rough", "slope"],
                         help="3D 地表起伏類型 (flat: 經典平地, blocks: 階梯石柱區塊陣, park: 4大主題複合越野公園, bumps: 密集高頻波浪, rough: 嶙峋碎石, slope: 傾斜坡道，預設: park)")
-    parser.add_argument("--terrain-height", type=float, default=0.035,
-                        help="地形最大起伏高度 (公尺，預設: 0.035 即 3.5cm，支援至 0.06m)")
+    parser.add_argument("--terrain-height", type=float, default=0.045,
+                        help="地形最大起伏高度 (公尺，預設: 0.045 即 4.5cm，支援至 0.08m / 8.0cm)")
+    parser.add_argument("--lift-femur", type=float, default=None,
+                        help="自訂大腿抬升幅度 (rad，預設越野超高抬腿: 0.55 rad 約 31.5 度)")
+    parser.add_argument("--lift-tibia", type=float, default=None,
+                        help="自訂小腿屈折幅度 (rad，預設越野超高抬腿: 0.36 rad 約 20.6 度)")
     return parser.parse_args()
 
 def print_controls():
@@ -83,13 +97,22 @@ def print_controls():
     print("  🔥【組合操控】：同時按住 [↑] + [←] 或 [→]，可實現流暢的弧形前進轉彎！")
     print("  ⚡【衝刺加速】：按住 [Shift] + [↑]，可在當前檔位激發額外爆發速度！")
     print("  ----------------------------------------------------------------------")
-    print("  ⚙️【檔位變速箱 (調節腳步步頻與跑步速度)】：")
-    print("    [1] ~ [4] 鍵 / 小鍵盤 1~4：直達 1~4 檔位")
-    print("      - [1 檔] ECO 慢步爬坡: 步頻 1.0 Hz | 巡航 0.15 m/s (超穩重高扭力)")
-    print("      - [2 檔] NORMAL 標準:  步頻 1.5 Hz | 巡航 0.25 m/s (預設基準步態)")
-    print("      - [3 檔] SPORT 快跑:   步頻 2.0 Hz | 巡航 0.36 m/s (敏捷高速奔馳)")
-    print("      - [4 檔] TURBO 極速:   步頻 2.5 Hz | 巡航 0.45 m/s (飛速高頻狂飆)")
-    print("    [+] / [-] 或 [[] / []]：逐級升檔 / 降檔")
+    print("  ⚙️【速度與步頻控制 (1~3 檔獨立切換速度)】：")
+    print("    [1] 鍵 / 小鍵盤 1:  ECO 慢步爬坡  (步頻 1.0 Hz | 巡航 0.15 m/s)")
+    print("    [2] 鍵 / 小鍵盤 2:  NORMAL 標準  (步頻 1.5 Hz | 巡航 0.25 m/s，預設基準)")
+    print("    [3] 鍵 / 小鍵盤 3:  TURBO 極速   (步頻 2.5 Hz | 巡航 0.45 m/s)")
+    print("    [+] / [-] 或 [[] / []]：逐級加速 / 減速 (1~3 檔)")
+    print("  ----------------------------------------------------------------------")
+    print("  🏔️【越野姿態開關 (4 鍵 Toggle 切換)】：")
+    print("    [4] 鍵 / 小鍵盤 4：按一下切換為【OFFROAD 越野挺身姿態】(超高底盤避障)")
+    print("                      再按一下切換回【一般基準姿態】")
+    print("    💡【雙軸完全獨立】：您可按 [4] 挺身，並同時按 [1]~[3] 自由調整快慢！")
+    print("  ----------------------------------------------------------------------")
+    print("  🚀【立定跳躍雙檔模式 (按鍵 5 與 6)】：")
+    print("    [5] 鍵 / 小鍵盤 5：觸發【50cm 爆發大跳 (Standard High Jump)】")
+    print("    [6] 鍵 / 小鍵盤 6：激發【70cm 火箭超跳 (Super Rocket Jump)】(飛越人身腰部！)")
+    print("                      (安全深蹲蓄力 -> 瞬間全功率爆發 -> 騰空伸足迎接地面 -> 腳掌動態觸地吸震，腹部全程零觸地)")
+    print("  ----------------------------------------------------------------------")
     print("  🔄 [R 鍵] 或 [Backspace]：按一下將機器人重置回起點")
     print("  🎥 [T 鍵]：切換鏡頭自動追隨模式 (開/關)")
     print("  ⏸️ [空白鍵 (Space)]：暫停 / 繼續物理模擬")
@@ -129,6 +152,10 @@ def main():
         terrain_height=args.terrain_height
     )
     env.max_steps = 50000  # 延長至 ~16 分鐘 (原本 1000 步 = 20 秒太短)
+    if args.lift_femur is not None and args.lift_tibia is not None:
+        env.kinematics.set_lift_height(args.lift_femur, args.lift_tibia)
+        print(f"  [運動學] 🦾 套用自訂抬腿幅度: Femur={args.lift_femur:.2f} rad, Tibia={args.lift_tibia:.2f} rad")
+
     current_cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)
     env.command = current_cmd.copy()
 
@@ -143,18 +170,28 @@ def main():
     r_key_prev = False
     t_key_prev = False
 
-    # 檔位控制系統 (預設 2 檔: 標準巡航 1.5 Hz)
-    current_gear = 2
-    env.step_frequency = GEAR_PROFILES[current_gear]["freq"]
-    gear_keys_prev = {1: False, 2: False, 3: False, 4: False}
-    gear_up_prev = False
-    gear_down_prev = False
+    # 速度檔位與越野姿態控制系統 (雙軸完全獨立)
+    current_speed = 2   # 預設 2 檔: 標準巡航 1.5 Hz
+    is_offroad = False  # 預設 False: 一般基準姿態
+
+    env.step_frequency = SPEED_PROFILES[current_speed]["freq"]
+    env.set_joint_offsets(POSTURE_PROFILES[is_offroad]["offset_hip"], POSTURE_PROFILES[is_offroad]["offset_tibia"])
+
+    speed_keys_prev = {1: False, 2: False, 3: False}
+    key_4_prev = False
+    key_5_prev = False
+    key_6_prev = False
+    speed_up_prev = False
+    speed_down_prev = False
+
+    # 立定跳躍控制器 (配備瞬間過載脈衝爆發與伸足著地防腹部觸地保護)
+    jump_ctrl = JumpController(dt=env.dt, model=env.model, enable_burst=True)
 
     # 印出說明文字
     print_controls()
     print(f"載入權重: {model_path}")
     terrain_desc = f"{args.terrain} (起伏: ±{args.terrain_height*100:.1f} cm)" if args.terrain != 'flat' else 'flat (平坦地面)'
-    print(f"地貌設定: 【{terrain_desc}】 | 初始檔位: 【2 檔 {GEAR_PROFILES[2]['name']}】 (步頻: 1.5 Hz) | 鏡頭自動跟隨: {'開啟' if camera_tracking else '關閉'}\n")
+    print(f"地貌設定: 【{terrain_desc}】 | 初始速度: 【{current_speed} 檔 {SPEED_PROFILES[current_speed]['name']}】 (步頻: 1.5 Hz) | 初始姿態: 【{POSTURE_PROFILES[is_offroad]['name']}】 | 鏡頭自動跟隨: {'開啟' if camera_tracking else '關閉'}\n")
 
     # 3. 啟動 MuJoCo 互動視窗
     with mujoco.viewer.launch_passive(env.model, env.data) as viewer:
@@ -173,51 +210,78 @@ def main():
         while viewer.is_running():
             step_start = time.time()
 
-            # ===== 4. 檔位切換檢測 (單擊觸發防抖動) =====
-            def switch_gear(new_g):
-                nonlocal current_gear
-                if 1 <= new_g <= 4 and new_g != current_gear:
-                    current_gear = new_g
-                    cfg = GEAR_PROFILES[current_gear]
+            # ===== 4. 速度切換 (1~3 鍵) 與 越野姿態開關 (4 鍵 Toggle) =====
+            def switch_speed(new_s):
+                nonlocal current_speed
+                if 1 <= new_s <= 3 and new_s != current_speed:
+                    current_speed = new_s
+                    cfg = SPEED_PROFILES[current_speed]
                     env.step_frequency = cfg["freq"]
-                    print(f"  [檔位切換] ⚙️ 已切換至 【{current_gear} 檔: {cfg['name']}】 | 步頻: {cfg['freq']:.1f} Hz | 巡航: {cfg['vx']:.2f} m/s")
+                    p_name = POSTURE_PROFILES[is_offroad]["name"]
+                    print(f"  [速度切換] ⚡ 已切換至 【{current_speed} 檔: {cfg['name']}】 | 步頻: {cfg['freq']:.1f} Hz | 巡航: {cfg['vx']:.2f} m/s | 姿態: 【{p_name}】")
 
-            # 檢測數字鍵直選檔位 (1~4 鍵與小鍵盤 1~4)
-            direct_keys = [
-                (1, [VK_1, VK_NUMPAD1]),
-                (2, [VK_2, VK_NUMPAD2]),
-                (3, [VK_3, VK_NUMPAD3]),
-                (4, [VK_4, VK_NUMPAD4]),
-            ]
-            for g_num, vks in direct_keys:
+            def toggle_offroad():
+                nonlocal is_offroad
+                is_offroad = not is_offroad
+                p_cfg = POSTURE_PROFILES[is_offroad]
+                env.set_joint_offsets(p_cfg["offset_hip"], p_cfg["offset_tibia"])
+                s_cfg = SPEED_PROFILES[current_speed]
+                if is_offroad:
+                    posture_info = f"【{p_cfg['name']}】 (超高離地挺身: Hip +10° / Knee +10°)"
+                else:
+                    posture_info = f"【{p_cfg['name']}】 (基準自然拱步姿態)"
+                print(f"  [姿態切換] 🏔️ 已切換為 {posture_info} | 當前速度: 【{current_speed} 檔 {s_cfg['name']}】 ({s_cfg['freq']:.1f} Hz)")
+
+            # 檢測 1~3 鍵直選速度檔位 (主鍵盤 1~3 與小鍵盤 1~3)
+            for s_num, vks in [(1, [VK_1, VK_NUMPAD1]), (2, [VK_2, VK_NUMPAD2]), (3, [VK_3, VK_NUMPAD3])]:
                 k_down = any(is_key_down(vk) for vk in vks)
-                if k_down and not gear_keys_prev[g_num]:
-                    switch_gear(g_num)
-                gear_keys_prev[g_num] = k_down
+                if k_down and not speed_keys_prev[s_num]:
+                    switch_speed(s_num)
+                speed_keys_prev[s_num] = k_down
 
-            # 檢測升檔鍵 (+ / ] / NumPad +)
+            # 檢測 4 鍵切換越野姿態 (單擊 Toggle 開關防抖動：按一下越野挺身、再按一下回一般)
+            k4_down = is_key_down(VK_4) or is_key_down(VK_NUMPAD4)
+            if k4_down and not key_4_prev:
+                toggle_offroad()
+            key_4_prev = k4_down
+
+            # 檢測 5 鍵觸發 50cm 爆發大跳 (單擊防抖動)
+            k5_down = is_key_down(VK_5) or is_key_down(VK_NUMPAD5)
+            if k5_down and not key_5_prev:
+                if jump_ctrl.trigger(power=1.0):
+                    print("\n  [動作] ⚡ 【5 鍵 50cm+ 爆發大跳】激發！全六足同步蓄力起跳！")
+            key_5_prev = k5_down
+
+            # 檢測 6 鍵觸發 70cm 火箭超跳 (單擊防抖動)
+            k6_down = is_key_down(VK_6) or is_key_down(VK_NUMPAD6)
+            if k6_down and not key_6_prev:
+                if jump_ctrl.trigger(power=1.4):
+                    print("\n  [動作] 🔥 【6 鍵 70cm+ 火箭超跳】激發！全六足極限全功率飛躍！")
+            key_6_prev = k6_down
+
+            # 檢測升速檔鍵 (+ / ] / NumPad +)
             up_down = is_key_down(VK_OEM_PLUS) or is_key_down(VK_ADD) or is_key_down(VK_RBRACKET)
-            if up_down and not gear_up_prev:
-                switch_gear(min(4, current_gear + 1))
-            gear_up_prev = up_down
+            if up_down and not speed_up_prev:
+                switch_speed(min(3, current_speed + 1))
+            speed_up_prev = up_down
 
-            # 檢測降檔鍵 (- / [ / NumPad -)
+            # 檢測降速檔鍵 (- / [ / NumPad -)
             down_down = is_key_down(VK_OEM_MINUS) or is_key_down(VK_SUBTRACT) or is_key_down(VK_LBRACKET)
-            if down_down and not gear_down_prev:
-                switch_gear(max(1, current_gear - 1))
-            gear_down_prev = down_down
+            if down_down and not speed_down_prev:
+                switch_speed(max(1, current_speed - 1))
+            speed_down_prev = down_down
 
             # ===== 5. 實時檢測實體按鍵：按住即走、放開即停 =====
-            gear_cfg = GEAR_PROFILES[current_gear]
+            speed_cfg = SPEED_PROFILES[current_speed]
             shift_pressed = is_key_down(VK_SHIFT)
 
             # 若按住 Shift 且前進：激發渦輪加速，速度提升並將步頻額外拉高 10%
             if shift_pressed and is_key_down(VK_UP):
-                run_speed = gear_cfg["vx"] * gear_cfg["shift_mult"]
-                env.step_frequency = gear_cfg["freq"] * 1.10
+                run_speed = speed_cfg["vx"] * speed_cfg["shift_mult"]
+                env.step_frequency = speed_cfg["freq"] * 1.10
             else:
-                run_speed = gear_cfg["vx"]
-                env.step_frequency = gear_cfg["freq"]
+                run_speed = speed_cfg["vx"]
+                env.step_frequency = speed_cfg["freq"]
 
             target_vx = 0.0
             target_vy = 0.0
@@ -226,11 +290,11 @@ def main():
             if is_key_down(VK_UP):
                 target_vx += run_speed
             if is_key_down(VK_DOWN):
-                target_vx -= gear_cfg["back"]
+                target_vx -= speed_cfg["back"]
             if is_key_down(VK_LEFT):
-                target_wz += gear_cfg["yaw"]
+                target_wz += speed_cfg["yaw"]
             if is_key_down(VK_RIGHT):
-                target_wz -= gear_cfg["yaw"]
+                target_wz -= speed_cfg["yaw"]
 
             # 檢測 R 鍵重置 (單擊觸發防抖動)
             r_now = is_key_down(VK_R) or is_key_down(VK_BACK)
@@ -254,8 +318,10 @@ def main():
 
             # 處理手動重置
             if reset_requested:
+                jump_ctrl.reset()
                 obs, info = env.reset()
-                env.step_frequency = GEAR_PROFILES[current_gear]["freq"]
+                env.step_frequency = SPEED_PROFILES[current_speed]["freq"]
+                env.set_joint_offsets(POSTURE_PROFILES[is_offroad]["offset_hip"], POSTURE_PROFILES[is_offroad]["offset_tibia"])
                 obs[-5:-2] = current_cmd
                 reset_requested = False
                 step_idx = 0
@@ -271,29 +337,44 @@ def main():
             # 確保觀測中的指令為最新目標 (67 維中 [-5:-2] 為指令，[-2:] 為相位時鐘)
             obs[-5:-2] = current_cmd
 
-            # 策略推論預測動作 (18 維)
-            action, _ = model.predict(obs, deterministic=not args.stochastic)
-            obs, reward, terminated, truncated, info = env.step(action)
+            # 策略推論與動作執行 (支援立定跳躍控制器 FSM 優先覆蓋)
+            if jump_ctrl.is_jumping:
+                current_offsets = (POSTURE_PROFILES[is_offroad]["offset_hip"], POSTURE_PROFILES[is_offroad]["offset_tibia"])
+                q_jump = jump_ctrl.step(current_posture_offsets=current_offsets, data=env.data)
+                obs, reward, terminated, truncated, info = env.step(np.zeros(18, dtype=np.float32), override_target_angles=q_jump)
+                if not jump_ctrl.is_jumping:
+                    print("  [動作] 🛬 【立定跳躍完成】已成功平穩著地並恢復常態站姿！\n")
+            else:
+                action, _ = model.predict(obs, deterministic=not args.stochastic)
+                obs, reward, terminated, truncated, info = env.step(action)
+
             episode_reward += reward
             step_idx += 1
 
             # 定期在終端印出遙測狀態 (每 0.5 秒一次)
             if time.time() - last_print_time > 0.5:
-                is_moving = abs(current_cmd[0]) > 0.01 or abs(current_cmd[2]) > 0.01
-                status_icon = "🏃 [前進行駛中]" if current_cmd[0] > 0 else ("🔻 [倒退行駛中]" if current_cmd[0] < 0 else ("🔄 [原地轉彎中]" if abs(current_cmd[2]) > 0 else "🛑 [立定待命中]"))
+                if jump_ctrl.is_jumping:
+                    status_icon = f"🚀 [{jump_ctrl.get_phase_name()}]"
+                else:
+                    is_moving = abs(current_cmd[0]) > 0.01 or abs(current_cmd[2]) > 0.01
+                    status_icon = "🏃 [前進行駛中]" if current_cmd[0] > 0 else ("🔻 [倒退行駛中]" if current_cmd[0] < 0 else ("🔄 [原地轉彎中]" if abs(current_cmd[2]) > 0 else "🛑 [立定待命中]"))
                 shift_tag = " (⚡TURBO加速)" if (shift_pressed and is_key_down(VK_UP)) else ""
-                gear_tag = f"⚙️[{current_gear}檔 {env.step_frequency:.1f}Hz]"
+                posture_tag = "🏔️[OFFROAD越野姿態]" if is_offroad else "🌿[一般姿態]"
+                gear_tag = f"⚡[{current_speed}檔 {env.step_frequency:.1f}Hz] {posture_tag}"
                 
+                rel_h = info.get('rel_height', info['height'])
                 print(f"{gear_tag} {status_icon}{shift_tag} 目標: [vx={current_cmd[0]:+.2f}, yaw={current_cmd[2]:+.2f}] | "
                       f"實際: [vx={info['vx']:+.3f}, yaw={info['yaw_rate']:+.3f}] | "
-                      f"高度: {info['height']:.3f} m | 累積獎勵: {episode_reward:+.1f}")
+                      f"絕對高度: {info['height']:.3f}m (淨空: {rel_h*100:.1f}cm) | 累積獎勵: {episode_reward:+.1f}")
                 last_print_time = time.time()
 
             # 跌倒時自動重置位置；步數上限到達時只靜默重計 (不打斷操控)
             if terminated:
+                jump_ctrl.reset()
                 print(f"\n[回合結束] ⚠️ 失去平衡翻倒 (存活步數: {step_idx}, 總獎勵: {episode_reward:.2f}) -> 自動重置\n")
                 obs, info = env.reset()
-                env.step_frequency = GEAR_PROFILES[current_gear]["freq"]
+                env.step_frequency = SPEED_PROFILES[current_speed]["freq"]
+                env.set_joint_offsets(POSTURE_PROFILES[is_offroad]["offset_hip"], POSTURE_PROFILES[is_offroad]["offset_tibia"])
                 obs[-5:-2] = current_cmd
                 step_idx = 0
                 episode_reward = 0.0

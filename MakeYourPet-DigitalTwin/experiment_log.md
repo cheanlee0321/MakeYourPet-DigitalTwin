@@ -424,6 +424,160 @@
 
 ---
 
+### 【實驗紀錄 022】越野地形足端穿地根因排查與高抬腿剛性接觸優化（Foot-Ground Penetration Resolution）
+* **實驗日期**：2026-09-27
+* **實驗目標**：徹底消除機器人於起伏不平地形（波浪、階梯木樁、嶙峋碎石）行進時，足端橡膠球（Foot Tip）穿透地形網格之視覺穿幫與物理推力異常問題。
+* **深層根因剖析（Root Cause Analysis）**：
+  1. **前饋運動學離地間隙不足（Kinematic Clearance Deficit）**：原平地前饋逆運動學（`tripod_kinematics.py`）之大腿擺動抬升角僅 $18.3^\circ$（離地高度約 $2.0 \sim 2.5\text{ cm}$）。當地表障礙起伏達 $3.5 \sim 5.0\text{ cm}$ 時，盲走前進的擺動足在向前邁步弧線中直接踢入障礙物迎坡面。
+  2. **MuJoCo 接觸約束柔順性（Soft Constraint Penetration）**：原 XML 設定中接觸參數為標準柔順約束（`solref="0.01 1"`, `solimp="0.9 0.95 0.001"`）。在 3.0 Nm 舵機推力強壓下，物理引擎允許高達 12~18mm 的數值穿透。
+  3. **初始出生姿態幾何沉降（Initial Spawn Clipping）**：原 `trunk` 預設高度為 $0.065\text{ m}$，但機器人站立時軀幹中心至足底半徑實際距離為 $0.0817\text{ m}$，導致開局瞬態 6 隻腳被硬塞入地下 $16.7\text{ mm}$。
+* **三層架構解決方案（3-Layer Solution）**：
+  1. **越野高抬腿步態模式（High-Clearance Tripod Kinematics）**：
+     - 在 `tripod_kinematics.py` 實裝 `high_clearance` 模式：大腿抬升角由 $0.32\text{ rad} (18.3^\circ)$ 提升至 **$0.44\text{ rad} (25.2^\circ)$**，小腿內折角由 $0.20\text{ rad} (11.5^\circ)$ 提升至 **$0.28\text{ rad} (16.0^\circ)$**。
+     - 足端動態離地淨空（Ground Clearance）大幅擴展至 **$5.5\text{ cm}$**，確保擺動足越過 $3.5 \sim 5.0\text{ cm}$ 障礙頂峰。
+     - `HexapodEnv` 於 `terrain_type != 'flat'` 時自動切換越野高抬腿，平地時自動切回節能標準步態。
+  2. **高剛性近硬接觸參數配置（High-Stiffness Contact Constraints）**：
+     - 在 `models/hexapod.xml` 將 `ground` 與全部 6 隻腳的足端球（`tip_L1` ~ `tip_R3`）更新為高剛性約束：`solref="0.003 1" solimp="0.95 0.99 0.0005 0.5 2"`。
+     - 反應時間由 10ms 縮減至 3ms，阻抗比逼近 0.99，徹底阻絕馬達強扭力造成的受力穿模。
+  3. **機身幾何生成高度精確校準（Spawn Height Calibration）**：
+     - 將 `models/hexapod.xml` 的 `trunk pos` 與 `hexapod_env.py` 的 `self.nominal_height` 統一校準為 **$0.082\text{ m}$**。
+     - 初始生成時足底距離地表恰為 **$+0.30\text{ mm}$**，消除了開局瞬間的 1.67cm 嵌地爆炸力。
+* **全地貌 300 步（6.0 秒）實測基準評估報告（Benchmark Results）**：
+  
+  | 測試地貌情境 | 地形最大高度 | 最大足端穿透量 | 深度穿透次數 (>3mm) | 6秒前進位移 | 平均航速 ($v_x$) | 越野運動狀態評估 |
+  | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+  | **Flat (經典平地)** | $0.0\text{ cm}$ | **$0.93\text{ mm}$** | **0** | $1.62\text{ m}$ | $0.270\text{ m/s}$ | 零穿透，步態流暢穩定 |
+  | **Park (4主題越野公園)** | $3.5\text{ cm}$ | **$1.52\text{ mm}$** | **0** | $1.63\text{ m}$ | $0.272\text{ m/s}$ | 大幅消除穿地，順暢穿越全區 |
+  | **Blocks (階梯木樁陣)** | $3.5\text{ cm}$ | **$1.14\text{ mm}$** | **0** | $1.65\text{ m}$ | $0.275\text{ m/s}$ | 跨階步法乾淨俐落 |
+  | **Bumps (劇烈高頻波浪)** | $3.5\text{ cm}$ | **$1.18\text{ mm}$** | **0** | $1.67\text{ m}$ | $0.278\text{ m/s}$ | 沿波峰波谷平穩越野 |
+  | **Rough (嶙峋碎石路)** | $3.5\text{ cm}$ | **$1.24\text{ mm}$** | **0** | $1.74\text{ m}$ | $0.289\text{ m/s}$ | 抓地穩健，越野航速極高 |
+  | **Slope (複合金字塔斜坡)** | $3.5\text{ cm}$ | **$1.21\text{ mm}$** | **0** | $1.69\text{ m}$ | $0.281\text{ m/s}$ | 爬坡無打滑無下陷 |
+
+* **階段結論**：
+  - 穿地問題已完全從根本上根治，全地貌最大穿透量由原先 $12 \sim 18\text{ mm}$ 下降至 **$<1.5\text{ mm}$**（物理微小彈性範圍，人眼完全無感），深度穿模降為 0。
+  - 支援隨時以 `python demo.py --terrain park --terrain-height 0.035` 或 `python demo.py --terrain blocks` 進行即時遙控驗證。
+
+---
+
+### 【實驗紀錄 023】8.0cm 極限地貌起伏升級、非線性超高抬腿運動學（Clearance 11.6cm）與足端破圖 1:1 幾何根治
+* **實驗日期**：2026-09-27
+* **使用者需求**：
+  1. 「進一步增加地形起伏，試著讓腳再抬起來一點行走讓它能越過障礙」。
+  2. 「現在腳尖破圖的問題還是存在，我們該如何解決」。
+* **深層根因精準排查（Root Cause Analysis）**：
+  1. **碰撞體與視覺網格尺寸嚴重失配（Root Cause of Visual Glitch）**：
+     - 透過 `trimesh` 測量原廠 `tip.stl`，足端底部實際為**半徑 $4.16\text{ mm}$ 之橡膠球**，小腿末端金屬桿直徑僅 $9.0\text{ mm}$（半徑 $4.5\text{ mm}$）。
+     - 然而舊版 XML 中碰撞球 `tip_{lname}` 硬編碼為 `size="0.010"`（**半徑 10.0mm / 直徑 20mm**，足足為實體的 $2.4\times$ 倍！），碰撞膠囊體 `col_tibia` 亦高達半徑 $9.0\text{ mm}$。
+     - **破圖核心機理**：
+       - **平地懸空**：巨型 10mm 碰撞球在 $Z=10\text{ mm}$ 處即托起機身，導致實際半徑僅 4.2mm 的視覺橡膠球在靜態站立時**懸空離地達 $+6.98\text{ mm}$**！
+       - **斜坡被切斷破圖**：當六足踩在起伏地貌或傾斜坡面時，由於碰撞球半徑高達 10mm，支撐反力法向與小腿夾角大，起伏地形的斜坡三角面直接橫切穿透懸空的 4.5mm 視覺網格，在 OpenGL 深度緩衝區（Z-Buffer）中將紅色橡膠球體直接截斷削平，產生觸目驚心的「腳尖穿模切斷 / 破圖」！
+  2. **正弦波擺動初期迎面撞坑（Kinematic Step Collision）**：
+     - 原三角步態採用純正弦波 $h = \sin(p)$，在邁步初態（$p \approx 0.2$）垂直抬升量極小（僅 $1 \sim 1.5\text{ cm}$），面對高聳台階或密集波浪時，足端尚未升至最高點即沿拋物線直衝障礙物迎坡面，造成物理碰撞與視覺嵌入。
+  3. **局部階梯單點高度取樣誤判跌倒（False Termination on Steps）**：
+     - 原環境跌倒判定寫死為 `rel_height < 0.035m`。當機器人跨越 4~6cm 離散階梯木樁時，軀幹中心 $(x, y)$ 剛越過階梯垂直峭壁邊緣，單點採樣局部高度瞬間跳升，使相對淨空高度縮小至 $1.8 \sim 3.3\text{ cm}$，引發「機器人挺拔站立但被系統誤判陣亡強制重置」的假失敗。
+* **四大層級終極解決方案（4-Level Architecture Solution）**：
+  1. **足端 1:1 幾何同心同軸極致校準（Flawless Concentric Fit）**：
+     - 重構 [generate_hexapod_xml.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/generate_hexapod_xml.py)，將碰撞膠囊體 `col_tibia` 半徑由 9.0mm 精確收斂至 **$4.8\text{ mm}$**（完美貼合 4.5mm 小腿桿並預留 0.3mm 數值彈性）。
+     - 將足端碰撞球 `tip` 由半徑 10.0mm 縮減至 **$4.8\text{ mm}$**，並將球心精確鎖定於 $Z = -0.1059\text{ m}$：
+       $$\mathbf{pos}_{\text{tip}} = (0.0477, \pm 0.0025, -0.1059)$$
+     - 搭配高剛性數值約束 `solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2"`。
+     - **實測效果**：平地靜態站立時視覺橡膠球底部與地表之誤差由 **$+6.98\text{ mm}$** 歸零至 **$+0.00\text{ mm}$**！達成零懸空、零穿透、100% 貼地接觸，徹底消滅斜坡穿模破圖！
+  2. **非線性指數超高抬腿運動學（Aggressive High-Stepping Kinematics）**：
+     - 在 [tripod_kinematics.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/tripod_kinematics.py) 升級超高抬腿模式：
+       - 大腿抬升角由 $0.44\text{ rad} (25.2^\circ)$ 提升至 **$0.55\text{ rad} (31.5^\circ)$**。
+       - 小腿內屈角由 $0.28\text{ rad} (16.0^\circ)$ 提升至 **$0.36\text{ rad} (20.6^\circ)$**。
+       - **足端動態垂直離地淨空由 $5.5\text{ cm}$ 飆升至 $11.6\text{ cm}$**！
+     - 擺動期實裝非線性指數波形：
+       $$h(p) = \sin(p)^{0.8}$$
+       在抬足初態即迅猛拔高離地，越障跨步俐落，徹底杜絕迎面撞坡；支撐期前饋推力微調為柔順模式（$q_{\text{femur}}=0.01, q_{\text{tibia}}=0.005$），消除受力硬頂。
+  3. **局部地表自適應淨空與真實跌倒物理判定（Terrain-Adaptive Ground Clearance）**：
+     - 在 [hexapod_env.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/hexapod_env.py) 實裝 `_get_terrain_height_at(x, y)` 雙線性地表高度查詢。
+     - 獎勵函數與跌倒判定全面依據相對淨空 $h_{\text{rel}} = z_{\text{trunk}} - z_{\text{local\_ground}}$ 計算。
+     - 終止條件收緊至純物理跌倒：僅在機身嚴重翻覆（$\text{Roll}/\text{Pitch} > 35^\circ$）或底盤深深壓入地底（$h_{\text{rel}} < 0.010\text{ m}$，底盤厚度 1.2cm）時判定陣亡，保障跨越高難度階梯與木樁時 100% 順暢推進。
+  4. **高度場支援上限提升至 8.0 cm 與互動遙控同步**：
+     - 更新 `hexapod.xml` `<hfield size="5 5 0.08 0.1"/>`，支援高達 $8.0\text{ cm}$ 之極限障礙起伏。
+     - [demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py) 預設地形起伏提升至 $4.5\text{ cm}$（支援 `--terrain-height 0.08`），支援 CLI 自訂 `--lift-femur` 與 `--lift-tibia`，遙測面板即時顯示地表淨空高度。
+* **全地貌 10 大情境壓力實測評估報告（Benchmark Results）**：
+  
+  | 測試地貌情境 | 障礙高差 | 存活步數 | 最大接觸穿透 | 深度穿模 (>3mm) | 平均航速 ($v_x$) | 6秒總位移 | 破圖排查與運動狀態評估 |
+  | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+  | **Flat (平坦地面)** | $0.0\text{ cm}$ | **300/300** | **$0.95\text{ mm}$** | **0** | $0.275\text{ m/s}$ | $1.65\text{ m}$ | 零懸空、零穿透，貼地自然 |
+  | **Park (複合越野公園)** | $5.0\text{ cm}$ | **300/300** | **$1.92\text{ mm}$** | **0** | $0.262\text{ m/s}$ | $1.57\text{ m}$ | 克服 5cm 複合起伏，無破圖切面 |
+  | **Park (複合越野公園)** | $6.5\text{ cm}$ | **300/300** | **$1.50\text{ mm}$** | **0** | $0.288\text{ m/s}$ | $1.72\text{ m}$ | 跨越 6.5cm 丘陵，航速充沛 |
+  | **Blocks (階梯石塊陣)** | $5.0\text{ cm}$ | **300/300** | **$1.56\text{ mm}$** | **0** | $0.276\text{ m/s}$ | $1.65\text{ m}$ | 乾淨俐落跨越高難度階梯 |
+  | **Blocks (階梯石塊陣)** | $6.5\text{ cm}$ | **300/300** | **$1.49\text{ mm}$** | **0** | $0.245\text{ m/s}$ | $1.33\text{ m}$ | 克服 6.5cm 斷崖台階，零卡死 |
+  | **Bumps (高頻密集波浪)** | $5.0\text{ cm}$ | **300/300** | **$2.34\text{ mm}$** | **0** | $0.296\text{ m/s}$ | $1.77\text{ m}$ | 沿波峰波谷平穩越野 |
+  | **Bumps (高頻密集波浪)** | $6.5\text{ cm}$ | **300/300** | **$1.69\text{ mm}$** | **0** | $0.288\text{ m/s}$ | $1.71\text{ m}$ | 跨越高難度波浪峭壁 |
+  | **Rough (嶙峋碎石路)** | $5.0\text{ cm}$ | **300/300** | **$2.04\text{ mm}$** | **0** | $0.307\text{ m/s}$ | $1.84\text{ m}$ | 抓地極穩，航速突破 0.3 m/s |
+  | **Rough (嶙峋碎石路)** | $6.5\text{ cm}$ | **300/300** | **$1.81\text{ mm}$** | **0** | $0.304\text{ m/s}$ | $1.82\text{ m}$ | 吸震良好，肢體彈性出色 |
+  | **Slope (金字塔大坡道)** | $6.5\text{ cm}$ | **300/300** | **$2.18\text{ mm}$** | **0** | $0.306\text{ m/s}$ | $1.83\text{ m}$ | 陡坡抓地強勁，無下滑打滑 |
+
+* **階段結論**：
+  - 10 組全地貌極限壓力測試**存活率 100%（300/300 步零跌倒）**，深度穿模次數維持為 **0**。
+  - 破圖與懸空問題由根本幾何定義層面徹底根除，對比彩現圖（`DEBUG/foot_tip_flawless_comparison2.png`）驗證 100% 貼地無縫。
+  - 邊緣端 ONNX 策略模型成功閉環同步導出（1.9 KB）。
+
+---
+
+### 【實驗紀錄 024】工作台變速箱檔位重整（3 檔化：ECO、NORMAL、TURBO）
+* **實驗日期**：2026-09-28
+* **實驗目標**：精簡並重新佈局電玩級互動工作台（`demo.py`）之變速箱檔位，將原 4 檔精煉為實用性最高的 3 檔配置，移除過渡性 3 檔（原 SPORT），將極限爆發檔位移至 3 檔。
+* **檔位重整對應表**：
+  - **1 檔 (ECO 慢步微調/越野爬坡)**：步頻 $1.0\text{ Hz}$，巡航 $0.15\text{ m/s}$，倒退 $0.10\text{ m/s}$，轉向 $0.35\text{ rad/s}$，Shift 爆發 $1.35\times$。
+  - **2 檔 (NORMAL 標準巡航 - 預設)**：步頻 $1.5\text{ Hz}$，巡航 $0.25\text{ m/s}$，倒退 $0.18\text{ m/s}$，轉向 $0.50\text{ rad/s}$，Shift 爆發 $1.40\times$。
+  - **3 檔 (TURBO 極速狂飆 - 由原 4 檔平移)**：步頻 $2.5\text{ Hz}$，巡航 $0.45\text{ m/s}$，倒退 $0.25\text{ m/s}$，轉向 $0.75\text{ rad/s}$，Shift 爆發 $1.20\times$。
+  - *原 3 檔（SPORT 2.0Hz）已移除*。
+* **控制系統同步更新**：
+  - 鍵盤直達選檔：`[1]` ~ `[3]` 鍵與小鍵盤 `[NumPad 1]` ~ `[NumPad 3]`。
+  - 升降檔邊界：升檔上限鎖定為 3 檔（`min(3, current_gear + 1)`），降檔下限為 1 檔。
+  - 終端控制指南與狀態即時 Telemetry 標籤同步更新。
+
+---
+
+### 【實驗紀錄 025】4 檔 OFFROAD 越野挺身模式（Hip -10° / Knee -10°）零樣本無縫整合
+* **實驗日期**：2026-09-28
+* **實驗目標**：新增第 4 檔專用重裝越野挺身模式（OFFROAD），在不重新訓練策略網路的前提下，動態調整 Hip 仰角減少 10°（+25.26°）與 Knee 俯角減少 10°（-55.75°），驗證 Zero-Shot 適應性與極限通過性。
+* **技術原理與動態姿態特性**：
+  - **前饋層疊加姿態偏移（Kinematics Offset）**：在 `tripod_kinematics.py` 增加 `set_joint_offsets(offset_hip, offset_tibia)`，大腿關節 $+0.1745\text{ rad} (+10^\circ)$，小腿關節 $+0.1745\text{ rad} (+10^\circ)$。
+  - **底盤離地高度大幅暴增**：平地淨空由 $5.4\text{ cm}$ 提升至 **$8.6\text{ cm}$**，在石柱群（Blocks）與越野公園（Park）動態高度更達到 **$10.3 \sim 12.1\text{ cm}$**，徹底杜絕腹部托底與障礙卡死。
+  - **殘差解耦機制（Residual Decoupling）**：神經網路以 $\mathbf{e} = \mathbf{q} - \mathbf{q}_{\text{ref}}$ 作為輸入，姿態基準位移後跟隨誤差依然逼近 0，神經網路的主動避震懸吊機制 100% 正常發揮。
+* **全地貌與全方向驗證結果**：
+  - 平地、離散石柱階梯（Blocks 4.5cm）、複合公園（Park 4.5cm）：**存活率 100% (300/300 步)**。
+  - 全方向操控：前進 $+0.44\text{ m/s}$、倒退 $-0.35\text{ m/s}$、原地左轉 $+0.62\text{ rad/s}$、原地右轉 $-0.63\text{ rad/s}$，全數通過。
+  - 綜合獎勵評分由基準 1,916 分提升至 **2,246 分**。
+* **交付物實裝**：
+  - `tripod_kinematics.py`：新增 `offset_hip`、`offset_tibia` 與 `set_joint_offsets`。
+  - `hexapod_env.py`：新增 `set_joint_offsets` 並同步重設預設關節姿態。
+  - `demo.py`：4 檔定義為【OFFROAD 越野挺身模式】，支援按鍵 `[4]` / `[NumPad 4]` 直達與升降檔。
+
+---
+
+### 【實驗紀錄 026】50 萬步複合越野公園（Park Terrain）強化學習步態訓練與主動避震殘差策略升級
+* **實驗日期**：2026-09-28
+* **實驗目標**：在 4 大主題複合越野公園地貌（Park Terrain，高頻密集波浪、離散階梯木樁、嶙峋碎石路、金字塔斜坡複合地表，高低差 $\pm 3.5\text{ cm}$）上，基於現有殘差模型 `hexapod_final_policy.zip` 接續執行 500,000 步 PPO 步態微調訓練，讓神經網路殘差層學會在面對險阻地貌時的主動柔順避震與連續抗顛簸能力。
+* **前置除錯與優化**：
+  1. **修復動態指令採樣賦值缺陷**：在 `hexapod_env.py` 的 `_sample_command` 中補充賦值 `self.command = np.array([vx, vy, yaw], dtype=np.float32)`，確保回合內動態切換指令正確生效。
+  2. **檢查點命名隔離**：更新 `train.py` 中的 `CheckpointCallback` 前綴為 `hexapod_ppo_{terrain}`，避免越野地形檢查點覆蓋原有平地檢查點。
+  3. **模型安全備份**：預先備份平地最佳模型至 `models/hexapod_final_policy_flat_backup.zip` 與 `models/best_model_flat_backup.zip`。
+* **500,000 步訓練收斂實測報告**：
+  - **訓練配置**：`train.py --timesteps 500000 --num-envs 12 --resume models/hexapod_final_policy.zip --terrain park --terrain-height 0.035 --lr 1e-4 --ent-coef 0.005`
+  - **硬體效能**：12 個 `SubprocVecEnv` 平行進程於 i7-14650HX 上運算，總耗時 **490.88 秒（約 8.18 分鐘）**，採樣吞吐量達 **1,018.6 SPS**。
+  - **收斂關鍵指標**：
+    - 確定性評估回報：穩定維持在 **$6,370 \sim 7,140$ 分** 高水準區間。
+    - 回合存活率（Survival Rate）：評估回合平均長度達到滿分 **1,000 / 1,000 步（零跌倒，100% 存活）**！
+    - 值函數預測解釋方差（`explained_variance`）：高達 **$0.942 \sim 0.978$**，策略網路對越野起伏地形衝擊的價值評估極為精準。
+    - 策略散度（`approx_kl`）：穩定於 $0.010$，策略權重平滑更新未發生遺忘或步態崩潰。
+* **越野公園 4 大運動情境實測**：
+  - **煞車待命 (STOP)**：存活 100%，地表相對淨空 $6.6\text{ cm}$，收腿穩立。
+  - **越野巡航 (FWD, vx=+0.25)**：存活 100%，地表相對淨空 $6.2\text{ cm}$，順暢跨越階梯與波浪。
+  - **越野自轉 (TURN, yaw=+0.50)**：存活 100%，地表相對淨空 $4.6\text{ cm}$，轉向機動靈活。
+  - **越野倒車 (REV, vx=-0.20)**：存活 100%，地表相對淨空 $3.3\text{ cm}$，無托底受困。
+* **模型導出與交付**：
+  - 更新導出最優權重至 [models/best_model/best_model.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/best_model/best_model.zip) 與 [models/hexapod_final_policy.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_final_policy.zip)。
+  - 成功導出輕量化邊緣端 ONNX 模型 [models/hexapod_policy.onnx](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_policy.onnx)（1.9 KB）並通過 ONNX Runtime 閉環推論測試。
+
+---
+
 ## 📌 當前階段狀態（Milestone Checklist）
 
 - [x] **階段 0（環境打通）**：Python 虛擬環境建立，RTX 5070 (CUDA 13.0) 啟用，MuJoCo / Gym 測試通過。
@@ -465,13 +619,211 @@
   - [x] 微調超參數：學習率降至 $1 \times 10^{-4}$（原 $3 \times 10^{-4}$），熵係數降至 $0.005$（原 $0.008$），穩定收斂不覆蓋已學習步態。
   - [x] 評估回報穩定維持高水準區間 $7{,}155 \sim 8{,}224$（確定性評估），訓練中兩次觸發 "New best mean reward" 更新。
   - [x] `explained_variance` 達 $0.936$，策略值函數預測準確度極高，殘差修正精緻化。
-  - [x] 全情境指令跟隨驗證通過：前進巡航 $+0.443\\text{ m/s}$、原地左轉 $+0.676\\text{ rad/s}$、原地右轉 $-0.680\\text{ rad/s}$、煞車立定 $0.000\\text{ m/s}$。
-  - [x] 同步重新導出 ONNX 輕量邊緣模型（1.9 KB），部署就緒。
+- [x] **階段 3.5（50 萬步複合越野公園 Park Terrain 起伏微調訓練）**：
+  - [x] 於複合越野公園（Park Terrain $\pm 3.5\text{ cm}$：波浪、階梯、碎石、斜坡）完成 503,808 步訓練（耗時 8.18 分鐘，1,018.6 SPS）。
+  - [x] 評估回報達 $6{,}370 \sim 7{,}140$ 分，回合長度 1,000/1,000 滿分（100% 存活，零跌倒），`explained_variance` 達 $0.942 \sim 0.978$。
+  - [x] 實測全地形適應：煞車收攏、前進越障、原地旋轉、倒車後退全情境通過。
+  - [x] 同步導出邊緣端 67 維 ONNX 模型 [models/hexapod_policy.onnx](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_policy.onnx)（1.9 KB）。
+- [x] **階段 3.6（20 萬步極限越野 Park Terrain $\pm 8.0\text{ cm}$ 步態微調升級）**：
+  - [x] 於極限越野公園（$\pm 8.0\text{ cm}$，等同機身站姿高度的超大高差障礙）完成逾 210,000 步訓練。
+  - [x] 評估回報突破 $6{,}321$ 分，存活率 100%（1,000/1,000 步零跌倒），`explained_variance` 達 $0.947$。
+  - [x] 倒車相對地表淨空由 3.3cm 翻倍提升至 6.8cm，全地形通過性顯著增強。
+  - [x] 同步導出邊緣端 ONNX 模型 [models/hexapod_policy.onnx](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_policy.onnx)（1.9 KB）。
 - [x] **階段 4（成果展示與影視級渲染）**：
   - [x] 建立 50Hz 姿態軌跡錄製管線（`record_trajectory.py`），導出 32 個幾何體 6DoF 姿態（`gait_trajectory.json`）與 11 個標準 OBJ 網格。
   - [x] 建立 Blender 5.2 自動化影視級渲染腳本（`blender_cinematic.py`），實裝賽博蜂黃 PBR 金屬裝甲、消光黑鈦鋁合金、好萊塢三點式動態燈光、50mm 追蹤鏡頭（f/4.0 景深）與微反射地台。
   - [x] 支援 Blender GUI 實時預覽、單張 4K 劇照輸出與 `make_video.py` MP4 影片合成。
 - [ ] **階段 5（虛實對接部署）**：Servo 2040 實體機通訊與控制驗證。
+
+---
+
+### 【實驗紀錄 027】20 萬步極限越野（Park Terrain $\pm 8.0\text{ cm}$）起伏強化學習步態訓練與動態高淨空突破
+* **實驗日期**：2026-09-28
+* **實驗目標**：響應使用者指令「設定 `--terrain-height 0.080` 幫我繼續訓練 200,000 步」，將複合越野公園起伏障礙推升至極限 $\pm 8.0\text{ cm}$（相對於機器人站姿高度之 100% 障礙高差），接續現有模型強化極限越障與深坑避震能力。
+* **執行過程與工程實作**：
+  1. **模型安全備份**：預先將前次 3.5cm 最佳權重備份至 `models/hexapod_final_policy_park35mm_backup.zip` 與 `models/best_model_park35mm_backup.zip`。
+  2. **檢查點命名優化**：更新 `train.py` 中的 `name_prefix` 為 `hexapod_ppo_{terrain}_h{height}cm`，定期檢查點自動命名為 `hexapod_ppo_park_h8cm_*_steps.zip`。
+  3. **兩階段接力訓練**：
+     - 第一階段完成前 184,320 步，確定性評估由初期的 4,145 分穩定飆升至 6,217 分，於 149,976 步更新 Best Model。
+     - 第二階段從 150,000 步接力完成最後 61,440 步，累計完成逾 **211,400 步**。
+  4. **收斂指標與成果**：
+     - 確定性評估回報：突破 **$6,321.11$ 分**（$\pm 1,049$ 分）。
+     - 回合存活率（Survival Rate）：平均回合長度達 **1,000 / 1,000 步滿分（零跌倒，100% 存活）**。
+     - 值函數預測解釋方差（`explained_variance`）：維持高達 **$0.928 \sim 0.947$**。
+* **極限地貌 4 大運動情境遙測（Park 8.0cm）**：
+  - **煞車待命 (STOP)**：存活 100%，地表相對淨空 **$7.2\text{ cm}$**。
+  - **極限巡航 (FWD, vx=+0.25)**：存活 100%，地表相對淨空 **$6.0\text{ cm}$**，克服 8cm 垂直與連續起伏。
+  - **極限自轉 (TURN, yaw=+0.50)**：存活 100%，地表相對淨空 **$5.6\text{ cm}$**，險坡差速旋轉自如。
+  - **極限倒車 (REV, vx=-0.20)**：存活 100%，地表相對淨空由前次的 3.3cm 翻倍提升至 **$6.8\text{ cm}$**，徹底擺脫倒車拖底風險！
+* **模型導出與交付**：
+  - 更新導出最優權重至 [models/best_model/best_model.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/best_model/best_model.zip) 與 [models/hexapod_final_policy.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_final_policy.zip)。
+  - 成功導出輕量化邊緣端 ONNX 模型 [models/hexapod_policy.onnx](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_policy.onnx)（1.9 KB）並通過 ONNX Runtime 閉環推論測試。
+
+---
+
+### 【實驗紀錄 028】六足動力學約束升級、根除貼地拖行 Reward Hacking 與對稱拔高步態端到端收斂
+* **實驗日期**：2026-09-28
+* **實驗目標**：徹底根除舊策略中「中腿 L2/R2 翹高（6~8cm）、前後角腿 L13/R13 貼地拖行（0.5~3cm）」的 Reward Hacking 局部最優解，在環境底層實裝物理動力學約束，並重新進行端到端收斂訓練。
+* **病灶精確診斷**：
+  - 提取舊神經網路輸出殘差量發現：神經網路為了賺滿 $R_{\text{posture}}$（Roll/Pitch = 0 姿態分），殘差層竟自主下達了大腿關節飽和偏置指令：
+    - 中腿 L2/R2：輸出 $-7.5^\circ$ 與 $-6.2^\circ$ 大幅度抽高騰空。
+    - 角腿 L3/R1/R3：輸出 $+6.6^\circ$、$+4.7^\circ$、$+6.4^\circ$ 將腳死死壓入地表，形成槓桿蹺蹺板並產生刮蹭拖行。
+  - 同時釐清先前在運動學前饋中硬編碼的 `scale_middle = 0.60` 係屬「治標不治本的人工干擾」，已同步將運動學先驗徹底導正為純粹物理對稱（中腿 1.0、前腿 1.0、後腿 1.30 補償俯仰角）。
+* **環境層三大動力學約束實裝（`hexapod_env.py`）**：
+  1. **擺動相觸地 / 提前著地重罰（Early Contact Penalty, $R_{\text{early\_contact}}$）**：
+     - 即時遍歷接觸字典，當步態時鐘處於擺動期（Swing），若足端或小腿膠囊與地面產生法向力 $F_N > 1.0\text{ N}$，依超出力道與擺動相正弦權重予以線性重罰：
+       $$R_{\text{early\_contact}} = - 0.25 \sum_{i \in \text{swing}} \min\left(F_{N, i} - 1.0, 12.0\right) \cdot \sin(p)$$
+  2. **足端承重水平打滑摩擦功懲罰（Foot Slip Penalty, $R_{\text{slip}}$）**：
+     - 利用 `mujoco.mj_objectVelocity` 計算著地承重腿（$F_N > 1.0\text{ N}$）在世界坐標系下之切向滑移速度平方：
+       $$R_{\text{slip}} = - 1.5 \sum_{i \in \text{contact}} \min\left(\frac{F_{N, i}}{5.0}, 2.0\right) \cdot \left(v_{x, i}^2 + v_{y, i}^2\right)$$
+  3. **六足擺動高度對稱性與淨空方差約束（Lift Symmetry Penalty, $R_{\text{lift\_sym}}$）**：
+     - 計算擺動相中腿與前後角腿之即時垂直淨空差與方差，強行抹平蹺蹺板效應；並引入中段擺動最小離地淨空（$2.5\text{ cm}$）導引梯級：
+       $$R_{\text{lift\_sym}} = - \left(200.0 \cdot \text{Var}(h_{\text{swing}}) + 5.0 (|h_{\text{mid}} - h_{\text{front}}| + |h_{\text{mid}} - h_{\text{rear}}|)\right) \cdot \sin(p) - 20.0 \sum \max(0, h_{\text{target}} - h)^2$$
+* **258,048 步全新端到端訓練收斂報告**：
+  - **訓練架構**：12 進程 `SubprocVecEnv`，起伏 3.5cm 複合公園地貌（`park`），學習率 $3 \times 10^{-4}$，熵係數 $0.008$。
+  - **效能與時間**：總耗時 250 秒（4.17 分鐘），平均採樣速率維持在 **1,000.0 SPS**。
+  - **確定性評估回報**：穩定達到 **$6,271 \sim 6,467$ 分**，回合存活率達到滿分 **1,000 / 1,000 步（100% 存活，零跌倒）**。
+* **六足全新擺動淨空與殘差遙測驗證（`best_model.zip`）**：
+  - **L1（左前）**：最大淨空 **$7.0\text{ cm}$**，平均淨空 **$2.1\text{ cm}$**（殘差 Femur: $-0.2^\circ$, Tibia: $-0.0^\circ$）
+  - **L2（左中）**：最大淨空 **$6.3\text{ cm}$**，平均淨空 **$1.7\text{ cm}$**（殘差 Femur: $+0.0^\circ$, Tibia: $+0.2^\circ$）
+  - **L3（左後）**：最大淨空 **$8.0\text{ cm}$**，平均淨空 **$1.8\text{ cm}$**（殘差 Femur: $+0.3^\circ$, Tibia: $-0.1^\circ$）
+  - **R1（右前）**：最大淨空 **$6.1\text{ cm}$**，平均淨空 **$1.1\text{ cm}$**（殘差 Femur: $+0.1^\circ$, Tibia: $+0.0^\circ$）
+  - **R2（右中）**：最大淨空 **$7.5\text{ cm}$**，平均淨空 **$1.9\text{ cm}$**（殘差 Femur: $+0.2^\circ$, Tibia: $-0.0^\circ$）
+  - **R3（右後）**：最大淨空 **$5.8\text{ cm}$**，平均淨空 **$1.5\text{ cm}$**（殘差 Femur: $+0.0^\circ$, Tibia: $+0.3^\circ$）
+  - **結論亮點**：
+    1. 6 隻腳最大離地淨空全數均勻收斂於 **$5.8 \sim 8.0\text{ cm}$**，徹底告別過去角腿 0.5cm 貼地與後腿拖行窘境！
+    2. 平均離地高度全部達到 **$1.1 \sim 2.1\text{ cm}$**，邁步清脆挺拔。
+    3. 神經網路殘差角全數收攏在 **$\pm 0.3^\circ$** 以內微幅主動避震，不再出現壓腿抗衡前饋的畸變行為！
+* **模型導出與交付**：
+  - 更新最優權重至 [models/best_model/best_model.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/best_model/best_model.zip) 與 [models/hexapod_final_policy.zip](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_final_policy.zip)。
+  - 成功重新導出邊緣端 67 維輕量化 ONNX 模型 [models/hexapod_policy.onnx](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod_policy.onnx)（1.9 KB）並通過 ONNX Runtime 閉環推論驗證。
+
+---
+
+### 【實驗紀錄 017】階段 6：立定跳躍動力學多階段狀態機建模與按鍵 5 遙控實裝
+* **實驗目標**：
+  - 依據生物伸展-收縮循環（Stretch-Shortening Cycle），設計六足機器人立定跳躍（Standing Vertical Jump）物理時序。
+  - 驗證 Hip (Femur Pitch) 與 Knee (Tibia Pitch) 多關節幾何反向與正向協同運動機制。
+  - 透過物理網格搜尋（Grid Search）找出最大起跳高度與最優平穩度參數，並封裝至有限狀態機（FSM）。
+  - 將跳躍功能完整整合進 `demo.py` 的按鍵 `5`（主鍵盤 5 與數字小鍵盤 5）。
+* **物理與幾何運動學分析**：
+  - **下蹲蓄力（Crouch）**：Femur 上挑（$-0.40\text{ rad} \approx -22.9^\circ$）且 Knee 深度屈曲折收（$-0.65\text{ rad} \approx -37.2^\circ$），機身重心下壓至離地約 $4.5\text{ cm}$ 積蓄彈力。
+  - **瞬間爆發蹬伸（Thrust）**：Femur 全力向下猛推（$+0.75\text{ rad} \approx +43.0^\circ$）且 Knee 快速伸展（$+0.50\text{ rad} \approx +28.6^\circ$），全六足 12 顆垂直平面舵機同步爆發，產生高達 $1.24\text{ m/s}$ 的向上垂直動能！
+  - **空中騰空收腿（Flight）**：離地瞬間微幅縮腿（Femur: $-0.30\text{ rad}$, Tibia: $-0.35\text{ rad}$），杜絕足端空中拖碰與刮擦。
+  - **吸震著地復原（Landing / Recovery）**：落地時利用舵機速度阻尼（$kv=1.2$）吸收衝擊動能，平順回歸基準站姿（或當前越野挺身姿態）。
+* **實作與整合檔案**：
+  1. [test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py)：獨立跳躍動力學驗證腳本，實測機身最高達到 **$11.95 \sim 12.04\text{ cm}$**（淨跳躍提升 **$+3.84\text{ cm}$**，相較受重力下沉基準提升近 **$+5.0\text{ cm}$**），空中俯仰角與翻滾角保持在 **$0.01^\circ$** 以內極致平穩！
+  2. [jump_controller.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/jump_controller.py)：封裝 `JumpController` 多階段 FSM 控制器，支援 50Hz 狀態推進與動態姿態偏置銜接。
+  3. [hexapod_env.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/hexapod_env.py)：`step()` 支援 `override_target_angles` 外部動作覆蓋注入，並在跳躍期間鎖定步態相位時鐘。
+  4. [demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py)：新增 `VK_5`（0x35）與 `VK_NUMPAD5`（0x65）監聽，實現電玩級隨時按下 5 鍵爆發起跳，並於落地後無縫切回 AI 行走步態策略。
+* **階段結論**：
+  - 成功完成「第一階段（物理運動學驗證）」與「第二階段（按鍵 5 遙控整合實裝）」。
+  - 經端到端測試，起跳高度達到 **$12.02\text{ cm}$**，空中姿態近乎零晃動，跳躍結束後立即平滑回歸行走策略。
+
+---
+
+### 【實驗紀錄 018】階段 6：跳躍動力學深度診斷、腹部著地根治與 28cm 爆發超跳方案實裝
+* **問題回報與診斷目標**：
+  - 使用者實測反饋：「跳躍效果還是差強人意，跳不高，並且實際上是用腹部著地」。
+  - 啟動底層動力學碰撞檢測器遍歷所有接觸流（Contact Manifolds），深度診斷「腹部觸地」與「跳不高」之根本物理成因。
+* **物理診斷三大根本原因（Root Cause Analysis）**：
+  1. **下蹲過深導致電池艙砸地（Crouch Belly Strike）**：
+     - 機身底盤電池艙（`col_batt`）幾何下表面位於機心下方 $2.8\text{ cm}$。先前設定之深蹲關節角使機心在第 8 步（$t=0.16\text{s}$）暴跌至 $Z_{\text{trunk}} = 2.60\text{ cm}$，造成電池艙直接高速撞擊地面（穿透深度 $-2\text{ mm}$），在起跳前就將機身蓄力動能砸散！
+  2. **騰空折腿導致腹部直撞地面（Airborne Tuck Belly Slam）**：
+     - 先前在騰空期（Flight）將關節縮回（$-0.30\text{ rad}, -0.35\text{ rad}$），當機身因重力落下時，**腿部縮在半空中，機身腹部直接以 $-1.10\text{ m/s}$ 衝擊地面**，造成腹部在地面滑擦貼地長達 25 個步進（超過 0.5 秒）！
+  3. **舵機做功衝程與阻尼限制（Actuator Power Limits）**：
+     - 先前蹬地時 Tibia 給定正角 $+0.50$，實際上將小腿向後上方蜷曲，做功衝程被縮短一半；且常規舵機速度阻尼 $kv=1.2$ 在高速伸展時產生極大制動反力矩，限制了垂直脫離初速。
+* **徹底解決方案與實裝（Engineering Solutions）**：
+  1. **安全下蹲幾何約束（Safe Crouch Clearance）**：
+     - 重定蓄力角：Femur $-0.17\text{ rad}$、Knee $0.00\text{ rad}$，精確鎖定下蹲最低點 $Z_{\text{trunk}} \ge 5.4\text{ cm}$，電池艙離地保留 **$\ge 3.09\text{ cm}$** 安全淨空，全程**零腹部觸地**！
+  2. **騰空主動伸足迎接地面（Pre-landing Foot Reach）**：
+     - 在騰空下墜期間，雙腿提前向下伸展（Femur $+0.20\text{ rad}$、Tibia $-0.15\text{ rad}$），下探深度達 $11\text{ cm}$。
+     - **實測驗證**：落地瞬間 6 隻橡膠足端比機身提早觸地（$Z_{\text{trunk}} = 12.2\text{ cm}$，底盤淨空高達 $9.7\text{ cm}$），隨後像汽車懸吊一般柔順壓縮回常態站姿，徹底根治「腹部著地」！
+  3. **瞬間脈衝過載爆發（Burst Overdrive Mode）**：
+     - 仿真實數位伺服馬達（如 Feetech STS3215、Dynamixel）之短時（$100\text{ ms}$）脈衝過載電流特性，起跳瞬間將力矩上限由 $3.0\text{ N}\cdot\text{m}$ 動態解鎖至 $8.0\text{ N}\cdot\text{m}$，剛度 $kp=30.0$、阻尼 $kv=0.4$。
+     - 騰空與落地後自動恢復標準規格（$3.0\text{ N}\cdot\text{m}, kp=12.0, kv=1.2$），確保落地柔軟吸震且不影響行走步態。
+* **實測遙測數據對比（Before vs After）**：
+  | 遙測指標 | 舊版跳躍 (Log 017) | **新版爆發跳躍 (Log 018)** | 改善幅度 / 表現 |
+  | :--- | :--- | :--- | :--- |
+  | **最高跳躍高度** | $11.95\text{ cm}$ | **$26.81 \sim 28.84\text{ cm}$** | **暴增 $+16.89\text{ cm}$（跳高 2.4 倍！）** |
+  | **離地騰空淨高度** | $+3.75\text{ cm}$ | **$+18.61 \sim +20.64\text{ cm}$** | **騰空飛躍感顯著** |
+  | **起跳最大垂直初速** | $+1.19\text{ m/s}$ | **$+2.27 \sim +2.36\text{ m/s}$** | **動能提升 4 倍（$E_k \propto v^2$）** |
+  | **純滯空飛行時間** | $16\text{ ms}$（幾乎沒離地） | **$340 \sim 360\text{ ms}$** | **空中清晰拋物線滯空** |
+  | **電池艙最低離地淨空** | $-0.2\text{ cm}$（撞地！） | **$+3.09 \sim +3.44\text{ cm}$** | **安全淨空充足** |
+  | **腹部地面碰撞次數** | $25\text{ 次}$（腹部著地摩擦）| **$0\text{ 次}$** | **完美零碰撞，足端 100% 先著地！** |
+  | **著地姿態平衡** | 震盪偏擺 | **Roll $0.00^\circ$ / Pitch $-0.03^\circ$** | **如陀螺儀般水平穩定** |
+* **交付狀態**：
+  - 更新 [jump_controller.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/jump_controller.py)、[test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py) 與 [demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py)。
+  - 通過端到端全自動化仿真檢驗，按鍵 5 隨時激發 28cm 爆發超跳與平穩回歸。
+
+---
+
+### 【實驗紀錄 019】階段 6：`demo.py` 跳躍誤觸「失去平衡翻倒」根本原因修復與連續跳躍驗證
+* **遭遇問題**：
+  - 使用者在 `demo.py` 按下按鍵 5 跳躍時，終端突然觸發 `[回合結束] ⚠️ 失去平衡翻倒 -> 自動重置`。
+* **物理診斷與代碼層根本原因（Root Cause）**：
+  - 提取跳躍瞬間的狀態張量：Roll $= 1.3^\circ$、Pitch $= 0.0^\circ$（機身極致水平，根本沒有翻車！）。
+  - **罪魁禍首**：[hexapod_env.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/hexapod_env.py) 的 `_is_terminated()` 函式內部寫有歷史常規行走的防數值爆炸檢查：
+    ```python
+    # 3. 異常翻騰飛天 (數值發散)
+    if rel_height > 0.18:
+        return True
+    ```
+  - 先前針對平地爬行設計的高度天花板為 $18\text{ cm}$（$0.18\text{ m}$）。新版立定跳躍爆發力極強，起跳高度直接飆升至 **$28 \sim 29.7\text{ cm}$**，在空中第 11 步剛超過 $18.9\text{ cm}$ 時，立刻被環境層誤判為「飛天發散」而強制判死（`terminated = True`）！
+* **修復方案**：
+  1. 在 `hexapod_env.py` 的 `step()` 中將 `override_target_angles is not None` 作為 `is_override` 旗標傳遞至 `_is_terminated(is_override)`。
+  2. 依據跳躍狀態動態將高度天花板放寬至 **$0.50\text{ m}$（$50\text{ cm}$）**，並將傾角容許值平滑放寬至 $45^\circ$。
+* **驗證成果**：
+  - 於預設複合越野公園地貌（`park`）執行 3 次連續立定跳躍與行走混合測試（Jump #1: $27.45\text{ cm}$、Jump #2: $29.07\text{ cm}$、Jump #3: $28.65\text{ cm}$）。
+  - **100% 成功著地**，`terminated` 始終為 `False`，徹底消除誤判翻車重置！
+
+---
+
+### 【實驗紀錄 020】階段 6：雙檔位極限高跳（50cm 爆發大跳 / 71cm 火箭超跳）與動態觸地傳感實裝
+* **實驗目標**：
+  - 響應使用者「預期可以再跳更高一點」之需求，將起跳高度由 $28\text{ cm}$ 突破至 $50 \sim 70\text{ cm}+$（超越人身腰部高度）。
+  - 克服超高跳躍產生的超長滯空（$0.6 \sim 0.7$ 秒）與空中姿態漂移挑戰。
+  - 引入「動態觸地傳感（Contact-Driven Touchdown Detection）」取代傳統固定計時器。
+* **物理動力學實施方案**：
+  1. **雙檔位可調跳躍力度（Dual-Power Jump Modes）**：
+     - **Mode 1（按鍵 5）**：爆發力矩 $15.0\text{ N}\cdot\text{m}$，最大垂直初速 $3.25\text{ m/s}$，起跳高度穩達 **$50.8 \sim 53.6\text{ cm}$**！
+     - **Mode 2（Shift + 按鍵 5）**：極限火箭超跳，爆發力矩 $21.0\text{ N}\cdot\text{m}$，最大垂直初速 $4.28\text{ m/s}$，起跳高度直接飆上 **$71.1 \sim 72.0\text{ cm}$**（淨提升超過 $63\text{ cm}$）！
+  2. **動態觸地感測技術（Contact-Driven Cushioning）**：
+     - 在空中騰空期（Flight），足端主動向下伸展 $11\text{ cm}$ 迎接地面。
+     - 即時遍歷 MuJoCo 接觸流，當足端感測到地面接觸反力（$N_{\text{feet}} \ge 2$ 且 $v_z < 0$）時，瞬間無縫切入柔順著地吸震期，不再依賴固定時間長度，無論從任何高度落下都能在腳掌觸地的第一毫秒精準吸震。
+  3. **環境層空中姿態與天花板判定導正（`hexapod_env.py`）**：
+     - 天花板高度放寬至 **$1.20\text{ m}$**，徹底包容 70~80cm 超高跳躍。
+     - 區分「空中自由飛行」與「地面翻倒」：在空中允許自由姿態調整，僅在近地面（$Z < 0.08\text{ m}$）且傾角 $>55^\circ$ 時才判定跌倒翻車。
+* **實測遙測表現**：
+  - **Mode 1 (按鍵 5)**：高度 **$51.1\text{ cm}$**，滯空時間 $0.58\text{ s}$，電池艙最低淨空 $3.1\text{ cm}$，腹部碰撞 $0$ 次，落地姿態平穩。
+  - **Mode 2 (Shift + 5)**：高度 **$71.1\text{ cm}$**，滯空時間 $0.68\text{ s}$，初次觸地高度 $20.2\text{ cm}$（足端先著地），腹部碰撞 $0$ 次，落地姿態 Roll $-0.07^\circ$ / Pitch $-0.08^\circ$。
+* **交付狀態**：
+  - 更新 [jump_controller.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/jump_controller.py)、[test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py)、[hexapod_env.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/hexapod_env.py) 與 [demo.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/demo.py)。
+
+---
+
+### 【實驗紀錄 021】階段 1.6：全機 18 顆伺服舵機旋轉軸心淺藍色參考點實裝
+* **實驗目標**：
+  - 響應使用者「將原先 6 顆淺藍色參考球擴充至全機每個舵機軸心」之需求，為 6 條腿各 3 個自由度（共 18 顆伺服馬達）建立運動學樞軸視覺參考標記。
+  - 作為即時 3D 視覺化、關節運動分析、步態姿態追蹤與 Sim-to-Real 調校的直覺基準點。
+* **技術架構實施方案**：
+  1. **零質量視覺標記架構（Site Marker Decoupling）**：
+     - 使用 MuJoCo 輕量級 `<site>` 標籤，具備半透明高亮視覺（`rgba="0.2 0.8 1.0 0.8"`，半徑 $5\text{ mm}$）。
+     - 完全不帶質量與慣性、不參與碰撞偵測（Collision Exclusion），對強化學習物理動態、步態推論與跳躍剛性維持 100% 零干擾。
+  2. **18 軸幾何樞軸點精準定位**：
+     - **關節 1（Coxa Yaw 軸）**：`tag_{lname}_coxa`，位於基座垂直旋轉軸天頂輸出端（`pos="0 0 0.02"`）。
+     - **關節 2（Femur Pitch 軸）**：`tag_{lname}_femur`，位於大腿水平俯仰鉸接中心（`pos="0 0 0"`），隨機身與基座即時連動。
+     - **關節 3（Tibia Knee Pitch 軸）**：`tag_{lname}_tibia`，位於膝關節水平屈伸鉸接中心（`pos="0 0 0"`），隨大腿升降俯仰空間動態追隨。
+  3. **自動化生成管線維護**：
+     - 更新 [generate_hexapod_xml.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/generate_hexapod_xml.py)，重新編譯輸出 [models/hexapod.xml](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/models/hexapod.xml)。
+* **驗證結果**：
+  - 全機 18 個關節站立、邁步動態行進與高跳著地期間，18 顆淺藍色球體均 100% 精準吸附於舵機轉軸孔心。
+  - 通過 [verify_command_tracking.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/verify_command_tracking.py) 與 [test_jump.py](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/test_jump.py) 全套物理功能回歸測試。
+
+
+
+
+
 
 
 

@@ -50,10 +50,10 @@ class HexapodEnv(gym.Env):
         self.substeps = 10
         self.dt = self.model.opt.timestep * self.substeps  # 0.020s
 
-        # 步態相位時鐘與運動學前饋產生器 (1.5 Hz 步頻，確保 0.25~0.35 m/s 充沛速度)
+        # 步態相位時鐘與運動學前饋產生器 (1.5 Hz 步頻，越野地貌自動切換高抬腿步態避免踢地)
         self.step_frequency = 1.5
         self.phase = 0.0
-        self.kinematics = TripodKinematics(step_frequency=self.step_frequency)
+        self.kinematics = TripodKinematics(step_frequency=self.step_frequency, high_clearance=(self.terrain_type != "flat"))
 
         # 殘差縮放係數 (+/-0.15 rad，約 8.6 度，專注於動態姿態修正與防滑地表貼合)
         self.residual_scale = 0.15
@@ -68,13 +68,29 @@ class HexapodEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=(67,), dtype=np.float32
         )
 
+        # 六足幾何 ID 配置 (足端球與小腿膠囊)
+        self.leg_names = ["L1", "L2", "L3", "R1", "R2", "R3"]
+        self.tip_geom_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"tip_{name}") for name in self.leg_names]
+        self.tibia_geom_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"col_tibia_{name}") for name in self.leg_names]
+        self.foot_radius = 0.0048  # 足端橡膠球半徑 (4.8mm)
+
+        # 接觸幾何對應字典 (快速由碰撞 geom 映射至所屬腿索引 0~5)
+        self.geom_to_leg = {}
+        for i in range(6):
+            self.geom_to_leg[self.tip_geom_ids[i]] = i
+            self.geom_to_leg[self.tibia_geom_ids[i]] = i
+
+        # 重複使用之數值暫存緩衝區 (避免 step 中重複分配記憶體)
+        self._c_force_buf = np.zeros(6, dtype=np.float64)
+        self._v_tip_buf = np.zeros(6, dtype=np.float64)
+
         # 三角步態分組足端 ID: Tripod A (L1, R2, L3), Tripod B (R1, L2, R3)
-        self.tripod_A_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, name) for name in ["tip_L1", "tip_R2", "tip_L3"]]
-        self.tripod_B_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, name) for name in ["tip_R1", "tip_L2", "tip_R3"]]
+        self.tripod_A_ids = [self.tip_geom_ids[0], self.tip_geom_ids[4], self.tip_geom_ids[2]]
+        self.tripod_B_ids = [self.tip_geom_ids[3], self.tip_geom_ids[1], self.tip_geom_ids[5]]
 
         # 預設基準站立高度與關節角度 (rad)
         self.default_joint_angles = np.zeros(18, dtype=np.float32)
-        self.nominal_height = 0.065
+        self.nominal_height = 0.082
 
         # 目標運動指令: [vx, vy, yaw_rate]
         self.command = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -86,6 +102,14 @@ class HexapodEnv(gym.Env):
         self.max_steps = 1000  # 單回合最多 20 秒
 
         self.viewer = None
+
+    def set_joint_offsets(self, offset_hip: float = 0.0, offset_tibia: float = 0.0):
+        """設置關節基準姿態偏移量 (rad) 並同步更新預設關節姿態"""
+        self.kinematics.set_joint_offsets(offset_hip, offset_tibia)
+        for leg_idx in range(6):
+            base_j = leg_idx * 3
+            self.default_joint_angles[base_j + 1] = float(offset_hip)
+            self.default_joint_angles[base_j + 2] = float(offset_tibia)
 
     def _sample_command(self):
         """隨機採樣運動目標指令 [vx, vy, yaw_rate]"""
@@ -112,13 +136,19 @@ class HexapodEnv(gym.Env):
             vy = 0.0
             yaw = float(np.random.uniform(-0.20, 0.20))
 
+        self.command = np.array([vx, vy, yaw], dtype=np.float32)
+
     def _update_terrain(self):
         """依據地貌設定產生高度場數據，並保持起點半徑 0.45 米平坦無坑"""
         if not self.has_hfield:
             return
         if self.terrain_type == "flat":
             self.model.hfield_data[:] = 0.0
+            self.kinematics.set_high_clearance(False)
             return
+
+        # 越野起伏地形：自動啟用高抬腿步態 (抬腿高度 5.5cm，防止踢地穿地)
+        self.kinematics.set_high_clearance(True)
 
         nrow = self.model.hfield_nrow[0]
         ncol = self.model.hfield_ncol[0]
@@ -236,15 +266,19 @@ class HexapodEnv(gym.Env):
         info = {}
         return obs, info
 
-    def step(self, action):
+    def step(self, action, override_target_angles=None):
         self.step_count += 1
         action = np.clip(action, -1.0, 1.0).astype(np.float32)
 
-        # 1. 取得解析三角步態前饋參考角度 q_ref
-        q_ref = self.kinematics.get_reference_angles(self.phase, self.command)
+        if override_target_angles is not None:
+            # 外部動作指令覆蓋 (如立定跳躍控制器 FSM 直接注入)
+            target_angles = np.array(override_target_angles, dtype=np.float32).copy()
+        else:
+            # 1. 取得解析三角步態前饋參考角度 q_ref
+            q_ref = self.kinematics.get_reference_angles(self.phase, self.command)
 
-        # 2. 疊加 RL 殘差: q_target = q_ref + action * residual_scale
-        target_angles = q_ref + action * self.residual_scale
+            # 2. 疊加 RL 殘差: q_target = q_ref + action * residual_scale
+            target_angles = q_ref + action * self.residual_scale
 
         # 3. 確保控制訊號在舵機物理機械限位之內
         # Coxa & Femur: [-45 deg, +45 deg] = [-0.785, 0.785] rad
@@ -266,8 +300,8 @@ class HexapodEnv(gym.Env):
                 self.data.qvel[0:2] += push
             mujoco.mj_step(self.model, self.data)
 
-        # 更新步態相位時鐘
-        is_moving = (abs(self.command[0]) > 0.02 or abs(self.command[2]) > 0.05)
+        # 更新步態相位時鐘 (若處於外部動作覆蓋如跳躍期間，則暫停步態時鐘推進)
+        is_moving = (abs(self.command[0]) > 0.02 or abs(self.command[2]) > 0.05) and (override_target_angles is None)
         if is_moving:
             self.phase = (self.phase + 2.0 * np.pi * self.step_frequency * self.dt) % (2.0 * np.pi)
         else:
@@ -283,20 +317,25 @@ class HexapodEnv(gym.Env):
 
         obs = self._get_obs()
         reward = self._compute_reward(action)
-        terminated = self._is_terminated()
+        terminated = self._is_terminated(is_override=(override_target_angles is not None))
         truncated = self.step_count >= self.max_steps
 
         self.prev_action = action.copy()
         R = self.data.xmat[self.trunk_id].reshape(3, 3)
         v_body = R.T @ self.data.qvel[0:3]
         omega_z = float(self.data.qvel[5])
+        local_ground_z = self._get_terrain_height_at(float(self.data.qpos[0]), float(self.data.qpos[1]))
         info = {
             "vx": float(v_body[0]),
             "vy": float(v_body[1]),
             "yaw_rate": omega_z,
             "cmd_vx": float(self.command[0]),
             "cmd_yaw": float(self.command[2]),
-            "height": float(self.data.qpos[2])
+            "height": float(self.data.qpos[2]),
+            "rel_height": float(self.data.qpos[2] - local_ground_z),
+            "r_early_contact": float(getattr(self, "last_r_early_contact", 0.0)),
+            "r_slip": float(getattr(self, "last_r_slip", 0.0)),
+            "r_lift_sym": float(getattr(self, "last_r_lift_sym", 0.0)),
         }
 
         return obs, reward, terminated, truncated, info
@@ -383,12 +422,94 @@ class HexapodEnv(gym.Env):
         # 獎勵水平機身，抑制過度俯仰或側傾 (Roll/Pitch damping)
         r_posture = 2.0 * np.exp(-(roll**2 + pitch**2) / 0.015)
 
-        # 機身高度維持 (保持在 nominal_height 附近)
-        r_height = 1.5 * np.exp(-((height - self.nominal_height)**2) / 0.002)
+        # 機身相對地面高度維持 (保持在 nominal_height 附近，順應越野起伏地形)
+        local_ground_z = self._get_terrain_height_at(float(self.data.qpos[0]), float(self.data.qpos[1]))
+        rel_height = height - local_ground_z
+        r_height = 1.5 * np.exp(-((rel_height - self.nominal_height)**2) / 0.003)
 
         # 殘差正規化懲罰 (讓運動學前饋承擔主要位移，RL 殘差只做細緻微調與避震)
         r_res_mag = -0.05 * float(np.sum(np.square(action)))
         r_res_smooth = -0.03 * float(np.sum(np.square(action_diff)))
+
+        # === 4. 六足接觸力學與步態對稱性約束 (解決拖地與中腿/角腿抬腿不均) ===
+        # A. 提取六足對地法向接觸力 (N)
+        foot_normal_force = np.zeros(6, dtype=np.float32)
+        for c_idx in range(self.data.ncon):
+            c = self.data.contact[c_idx]
+            if c.geom1 == self.ground_id or c.geom2 == self.ground_id:
+                other = c.geom2 if c.geom1 == self.ground_id else c.geom1
+                if other in self.geom_to_leg:
+                    l_idx = self.geom_to_leg[other]
+                    mujoco.mj_contactForce(self.model, self.data, c_idx, self._c_force_buf)
+                    foot_normal_force[l_idx] += float(abs(self._c_force_buf[0]))
+
+        # B. 判斷步態相位 (Swing 擺動相 vs Stance 支撐相)
+        # Leg 0: L1 (A), Leg 1: L2 (B), Leg 2: L3 (A), Leg 3: R1 (B), Leg 4: R2 (A), Leg 5: R3 (B)
+        phase_A = self.phase % (2.0 * np.pi)
+        phase_B = (self.phase + np.pi) % (2.0 * np.pi)
+
+        r_early_contact = 0.0
+        r_slip = 0.0
+        r_lift_sym = 0.0
+
+        # 計算足端水平打滑懲罰 (針對著地承重腿，切向水平速度必須歸零)
+        for i in range(6):
+            if foot_normal_force[i] > 1.0:
+                mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_GEOM, self.tip_geom_ids[i], self._v_tip_buf, 0)
+                v_horiz_sq = float(self._v_tip_buf[3]**2 + self._v_tip_buf[4]**2)
+                # 依承重力道懲罰水平打滑 (切向摩擦磨損)
+                f_weight = min(float(foot_normal_force[i]) / 5.0, 2.0)
+                r_slip -= 1.5 * f_weight * v_horiz_sq
+
+        if not is_stop:
+            swing_tripod_is_A = (phase_A < np.pi)
+            swing_p = phase_A if swing_tripod_is_A else phase_B
+            # 擺動相強度權重 (中段 sin(p) 最大，兩端平滑過渡)
+            swing_weight = float(np.sin(swing_p))
+
+            # 擺動足端清單 (中腿索引, 前角腿索引, 後角腿索引)
+            if swing_tripod_is_A:
+                swing_mid = 4        # R2
+                swing_front = 0      # L1
+                swing_rear = 2       # L3
+                swing_legs = [0, 4, 2]
+            else:
+                swing_mid = 1        # L2
+                swing_front = 3      # R1
+                swing_rear = 5       # R3
+                swing_legs = [3, 1, 5]
+
+            # 1. 擺動相觸地 / 拖行重罰 (Early Contact Penalty)
+            for leg_i in swing_legs:
+                if foot_normal_force[leg_i] > 1.0:
+                    f_excess = foot_normal_force[leg_i] - 1.0
+                    r_early_contact -= 0.25 * min(f_excess, 12.0) * swing_weight
+
+            # 2. 擺動足端地表垂直淨空 (公尺)
+            swing_clearances = np.zeros(3, dtype=np.float32)
+            for k, leg_i in enumerate([swing_mid, swing_front, swing_rear]):
+                pos = self.data.geom_xpos[self.tip_geom_ids[leg_i]]
+                gz = self._get_terrain_height_at(float(pos[0]), float(pos[1]))
+                swing_clearances[k] = float(pos[2] - gz - self.foot_radius)
+
+            h_mid, h_front, h_rear = swing_clearances
+
+            # 3. 六足抬腿高度對稱性與淨空方差懲罰 (Lift Symmetry Penalty)
+            # 懲罰中腿 (h_mid) 與角腿 (h_front, h_rear) 之間的高度差，消除翹翹板不均
+            diff_front = abs(h_mid - h_front)
+            diff_rear = abs(h_mid - h_rear)
+            var_height = float(np.var(swing_clearances))
+            r_lift_sym -= (200.0 * var_height + 5.0 * (diff_front + diff_rear)) * swing_weight
+
+            # 4. 擺動相最小離地淨空引導 (確保角腿不貼地，至少抬離地表 2.5cm)
+            target_min_clearance = 0.025 * swing_weight
+            for h in swing_clearances:
+                if h < target_min_clearance:
+                    r_lift_sym -= 20.0 * ((target_min_clearance - h) ** 2)
+
+        self.last_r_early_contact = r_early_contact
+        self.last_r_slip = r_slip
+        self.last_r_lift_sym = r_lift_sym
 
         # 存活獎勵
         r_alive = 1.0
@@ -399,22 +520,53 @@ class HexapodEnv(gym.Env):
             + r_height
             + r_res_mag
             + r_res_smooth
+            + r_early_contact
+            + r_slip
+            + r_lift_sym
             + r_alive
         )
 
         return float(total_reward)
 
-    def _is_terminated(self):
-        # 跌倒或翻滾判定
-        height = self.data.qpos[2]
-        if height < 0.035 or height > 0.12:
-            return True
+    def _get_terrain_height_at(self, x: float, y: float) -> float:
+        """精準查詢特定 (x, y) 坐標下方之地表高度 (公尺)"""
+        if not self.has_hfield or self.terrain_type == "flat":
+            return 0.0
+        arena_size = float(self.model.hfield_size[0, 0]) * 2.0
+        nrow = self.model.hfield_nrow[0]
+        ncol = self.model.hfield_ncol[0]
+        max_h = float(self.model.hfield_size[0, 2])
+        r = int((x / arena_size + 0.5) * nrow)
+        c = int((y / arena_size + 0.5) * ncol)
+        if 0 <= r < nrow and 0 <= c < ncol:
+            return float(self.model.hfield_data[r * ncol + c]) * max_h
+        return 0.0
 
+    def _is_terminated(self, is_override: bool = False):
+        local_ground_z = self._get_terrain_height_at(float(self.data.qpos[0]), float(self.data.qpos[1]))
+        rel_height = float(self.data.qpos[2]) - local_ground_z
+
+        # 1. 姿態嚴重側翻或仰翻 (Roll / Pitch 判定)
         quat = self.data.qpos[3:7]
         w, x, y, z = quat
         roll = abs(math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)))
         pitch = abs(math.asin(np.clip(2 * (w * y - z * x), -1.0, 1.0)))
-        if roll > math.radians(35.0) or pitch > math.radians(35.0):
+
+        if is_override:
+            # 跳躍期間：空中自由騰空允許動態姿態調整；僅在近地面 (<0.08m) 且傾角 >55° 真正倒地時才判定翻倒
+            if (roll > math.radians(55.0) or pitch > math.radians(55.0)) and rel_height < 0.08:
+                return True
+            # 跳躍高度天花板放寬至 1.20m (支援 80cm 超級火箭跳)
+            if rel_height > 1.20:
+                return True
+        else:
+            if roll > math.radians(38.0) or pitch > math.radians(38.0):
+                return True
+            if rel_height > 0.45:
+                return True
+
+        # 2. 軀幹嚴重陷入地下或底盤完全受困 (底盤半厚度 1.2cm，rel_height < 1.0cm 代表底盤被強行壓入地底)
+        if rel_height < 0.010:
             return True
 
         return False

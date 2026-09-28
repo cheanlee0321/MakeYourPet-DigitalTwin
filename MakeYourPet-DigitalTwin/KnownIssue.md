@@ -1,10 +1,10 @@
 # Make Your Pet 數位孿生與 AI 步態開發全域已知問題與避坑手冊 (Master Known Issues)
 
 > **專案名稱**：Make Your Pet 18-DOF Hexapod Digital Twin & AI Locomotion  
-> **更新日期**：2026-09-27  
+> **更新日期**：2026-09-28  
 > **核心導航**：
-> 1. [一、 CAD 幾何導出與 MuJoCo 坐標系衝突問題（已解決）](#一-cad-幾何導出與-mujoco-坐標系衝突問題已解決)（詳見子文件：[coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)）
-> 2. [二、 AI 強化學習訓練錯誤、死區與避坑對策（已解決）](#二-ai-強化學習訓練錯誤死區與避坑對策已解決)（詳見子文件：[training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)）
+> 1. [一、 CAD 幾何導出與 MuJoCo 坐標系衝突問題（已解決）](#一-cad-幾何導出與-mujoco-坐標系衝突問題已解決)（詳見子文件：[coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/coordinate_transformation_issues.md)）
+> 2. [二、 AI 強化學習訓練錯誤、死區與避坑對策（已解決）](#二-ai-強化學習訓練錯誤死區與避坑對策已解決)（詳見子文件：[training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/training_issues.md)）
 > 3. [三、 Sim-to-Real 實體部署潛在問題與預防對策](#三-sim-to-real-實體部署潛在問題與預防對策)
 
 ---
@@ -34,15 +34,15 @@
    - *現象*：網格碰撞導致數值發散穿透。
    - *解法*：尖端精確鎖定於 `pos="0.0477 \pm 0.0025 -0.1077"`，配置半徑 10mm 彈性橡膠球體（`friction="1.2 0.05 0.001"`, `solref="0.01 1"`）。
 
-> 完整幾何逆向公式與推導請參見：[KnownIssue/coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/coordinate_transformation_issues.md)
+> 完整幾何逆向公式與推導請參見：[KnownIssue/coordinate_transformation_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/coordinate_transformation_issues.md)
 
 ---
 
 ## 二、 AI 強化學習訓練錯誤、死區與避坑對策（已解決）
 
-在 AI 步態訓練管線（Gymnasium + PPO）開發中，經歷了由純盲目 RL 到業界標竿「殘差強化學習（Residual RL）」的重大架構突破，攻克了 10 大核心問題：
+在 AI 步態訓練管線（Gymnasium + PPO）開發中，經歷了由純盲目 RL 到業界標竿「殘差強化學習（Residual RL）」的重大架構突破，攻克了 13 大核心問題：
 
-### 2.1 十大訓練錯誤與修正對策速查
+### 2.1 十三大訓練錯誤與修正對策速查
 
 ```mermaid
 flowchart TD
@@ -68,7 +68,7 @@ flowchart TD
 
 | 編號 | 錯誤現象 | 核心根因剖析 | 最終修復代碼 / 策略 | 成效指標 |
 | :---: | :--- | :--- | :--- | :--- |
-| **01** | **六足黏地不動（速度 $0.003\text{ m/s}$）** | 抬腿邁步會短暫晃動，純 RL 陷入「六腳抓地躺平最安全」的局部最優死區 | 引入 `tripod_kinematics.py` 前饋發動機，升級為 **Residual RL**：$`\mathbf{q}_{\text{ctrl}} = \mathbf{q}_{\text{ref}} + \alpha \Delta \mathbf{q}`$ | **63 秒極速收斂，速度達 $0.255\text{ m/s}$（99.8% 追蹤），回報突破 8,480 分** |
+| **01** | **六足黏地不動（速度 $0.003\text{ m/s}$）** | 抬腿邁步會短暫晃動，純 RL 陷入「六腳抓地躺平最安全」的局部最優死區 | 引入 `tripod_kinematics.py` 前饋發動機，升級為 **Residual RL**：$\mathbf{q}_{\text{ctrl}} = \mathbf{q}_{\text{ref}} + \alpha \Delta \mathbf{q}$ | **63 秒極速收斂，速度達 $0.255\text{ m/s}$（99.8% 追蹤），回報突破 8,480 分** |
 | **02** | **失控自動暴衝** | 訓練時指令寫死為 $v_x=0.25$，停步與轉彎為分佈外（OOD）狀態 | 在 `HexapodEnv` 加入**多情境動態指令採樣**（停步 20%、巡航 50%、自轉 20%、倒車 10%）與回合內隨機切換 | 指令聽從率 100%，支援即時按住前進、放開立定煞停 |
 | **03** | **步態時鐘被踩爛失效** | 觀測由 65 維升至 67 維，舊代碼 `obs[-3:]=cmd` 直接覆蓋末端 2 維相位時鐘 $[\sin\phi, \cos\phi]$ | 嚴格統一觀測切片：指令設為 `obs[-5:-2]`，時鐘設為 `obs[-2:]` | 消除所有四肢紊亂抽搐，時鐘平順滾動 |
 | **04** | **直行微幅偏航（Yaw Drift）** | 左右兩側腿部 Coxa 轉向關節沿局部 Z 軸正旋轉時的推進極性相反 | 前饋公式左右腿推力嚴格反相取反（左腿 $+$, 右腿 $-$），並加入橫移懲罰 $-2.0 v_y^2$ | 直行 0.5 米航向角偏差小於 **$-1.0^\circ$**，橫移僅 1cm |
@@ -78,8 +78,11 @@ flowchart TD
 | **08** | **腹部貼地拖行不判跌倒** | 終止高度閾值過低（0.03m），底盤實際已在地面拖行但持續累積微小正獎勵 | 嚴格收緊終止判定：`if height < 0.035 or height > 0.12: return True` | 杜絕腹部貼地作弊，強迫六足挺拔支撐行走 |
 | **09** | **舵機高頻抖動與過熱（Jitter）** | 獎勵函數只看速度未約束變化率，導致每步（20ms）輸出動作劇烈突跳 | 加入動作平滑懲罰：$r_{\text{smooth}} = -0.03 \sum (\Delta a)^2$ 與幅度懲罰 $-0.05 \sum a^2$ | 動作平滑度提升 90% 以上，四肢軌跡流暢連續 |
 | **10** | **ONNX 導出維度警告** | PyTorch 2.4+ 對舊版 opset 14 與動態維度相容性問題 | 升級為 `opset_version=18`，限制輸出在 $[-1.0, 1.0]$ 並通過 ONNX Runtime 驗證 | 成功導出僅 **1.9 KB** 之輕量化神經網路 |
+| **11** | **越野地形足端穿地踢坑** | 前饋步態抬腿高度不足（2.5cm < 3.5cm 障礙）、MuJoCo 軟接觸約束容許 18mm 穿透、初始軀幹生成高度偏低（6.5cm vs 8.2cm 實際站姿） | 實裝高抬腿步態（Clearance 5.5cm）+ XML 高剛性約束（`solref="0.003 1"`）+ 軀幹生成高度校正至 0.082m | 全地形最大穿透降至 $\le 1.5\text{ mm}$，深度穿透降為 0，越野航速維持 $0.27\text{ m/s}$ |
+| **12** | **足端破圖、平地懸空與超高障礙跨越受阻** | 碰撞球半徑（10mm）為實體（4.16mm）之 2.4 倍，引發靜態懸空 7mm 與斜坡切面截斷破圖；正弦波擺動初態抬升慢迎面撞坑；跨階梯單點高度誤判跌倒 | 碰撞體 1:1 校準至 4.8mm、球心對齊 $Z=-0.1059\text{ m}$；實裝非線性超高抬腿（Clearance 11.6cm, $h=\sin(p)^{0.8}$）；局部地表相對淨空判定 | 靜態離地間隙由 $+6.98\text{ mm}$ 歸零至 **$+0.00\text{ mm}$** 達成 100% 貼地無破圖，全地貌極限起伏（達 6.5cm）**100% 存活零跌倒**，越野航速 $0.28\text{ m/s}$ |
+| **13** | **六足中腿翹高、角腿貼地拖行（Reward Hacking）** | 策略為賺滿機身水平姿態分（$Roll/Pitch=0$），自主飽和輸出（中腿 $-7^\circ$ 抽高，角腿 $+6^\circ$ 壓地形成蹺蹺板）；且環境缺乏擺動相觸地與滑移懲罰 | 清除人工前饋補償，於環境實裝**擺動相觸地重罰**、**承重水平滑移摩擦功懲罰**與**六足擺動高度方差約束** | 6 隻腳最大離地淨空均勻收斂於 **$5.8 \sim 8.0\text{ cm}$**，平均淨空 **$1.1 \sim 2.1\text{ cm}$**，殘差收攏至 $\pm 0.2^\circ$ 柔順避震，回報突破 6,467 分 |
 
-> 完整數學推導、程式碼片段與實測圖表請參見：[KnownIssue/training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20-%20Digital%20Twin/MakeYourPet-DigitalTwin/KnownIssue/training_issues.md)
+> 完整數學推導、程式碼片段與實測圖表請參見：[KnownIssue/training_issues.md](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/KnownIssue/training_issues.md)
 
 ---
 

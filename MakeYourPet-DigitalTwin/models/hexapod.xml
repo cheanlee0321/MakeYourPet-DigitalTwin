@@ -32,8 +32,8 @@
     <texture name="tex_wood" type="2d" file="wood.png"/>
     <material name="mat_wood" texture="tex_wood" texrepeat="14 14" reflectance="0.15" specular="0.3"/>
 
-    <!-- 地形高低起伏高度場資源 (160x160 高精網格，水平跨距 10x10 米，最大高差上限 6.0cm) -->
-    <hfield name="terrain" nrow="160" ncol="160" size="5 5 0.06 0.1"/>
+    <!-- 地形高低起伏高度場資源 (160x160 高精網格，水平跨距 10x10 米，最大高差上限 8.0cm) -->
+    <hfield name="terrain" nrow="160" ncol="160" size="5 5 0.08 0.1"/>
   </asset>
 
   <worldbody>
@@ -45,10 +45,10 @@
     <light name="light_nw" diffuse="0.75 0.75 0.75" specular="0.2 0.2 0.2" pos="-2.5  2.5 3.0" dir="0 0 -1"/>
     <light name="light_sw" diffuse="0.75 0.75 0.75" specular="0.2 0.2 0.2" pos="-2.5 -2.5 3.0" dir="0 0 -1"/>
     <light name="light_se" diffuse="0.75 0.75 0.75" specular="0.2 0.2 0.2" pos=" 2.5 -2.5 3.0" dir="0 0 -1"/>
-    <geom name="ground" type="hfield" hfield="terrain" material="mat_wood" friction="1.2 0.05 0.001"/>
+    <geom name="ground" type="hfield" hfield="terrain" material="mat_wood" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2"/>
 
-    <!-- 六足機體軀幹 (自由關節 freejoint) -->
-    <body name="trunk" pos="0 0 0.065">
+    <!-- 六足機體軀幹 (自由關節 freejoint，標稱站姿高度 0.082m) -->
+    <body name="trunk" pos="0 0 0.082">
       <freejoint name="root"/>
       <!-- 核心修正：機身主框架 (frame) 與頂蓋 (top-cover) 沿 Z 軸旋轉 90 度，使長軸與六足朝向對齊！ -->
       <geom name="vis_frame" type="mesh" mesh="mesh_frame" pos="0 0 -0.008" euler="0 0 90" material="mat_frame" contype="0" conaffinity="0" group="1"/>
@@ -70,7 +70,8 @@
 
       <!-- ========== 左前足 (L1) ========== -->
       <body name="mount_L1" pos="0.0835  0.0630 -0.010" euler="0 0 45.0">
-        <site name="tag_L1" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_L1_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_L1" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_L1" pos="0 0 0">
@@ -80,17 +81,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_L1" pos="0.043 0 0">
             <joint name="joint_L1_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_L1_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_L1" type="mesh" mesh="mesh_left_femur" pos="-0.0009 -0.0118 -0.0018" euler="90 0 35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_L1" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_L1" pos="0.065 0 0.046">
               <joint name="joint_L1_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_L1_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_L1" type="mesh" mesh="mesh_left_tibia" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_L1" type="mesh" mesh="mesh_left_shield" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_L1" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_L1" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_L1" type="mesh" mesh="mesh_tip" pos="0.0477 -0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_L1" type="sphere" pos="0.0477 -0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_L1" type="sphere" pos="0.0477 -0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
@@ -98,7 +103,8 @@
 
       <!-- ========== 左中足 (L2) ========== -->
       <body name="mount_L2" pos="0.0000  0.0815 -0.010" euler="0 0 90.0">
-        <site name="tag_L2" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_L2_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_L2" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_L2" pos="0 0 0">
@@ -108,17 +114,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_L2" pos="0.043 0 0">
             <joint name="joint_L2_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_L2_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_L2" type="mesh" mesh="mesh_left_femur" pos="-0.0009 -0.0118 -0.0018" euler="90 0 35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_L2" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_L2" pos="0.065 0 0.046">
               <joint name="joint_L2_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_L2_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_L2" type="mesh" mesh="mesh_left_tibia" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_L2" type="mesh" mesh="mesh_left_shield" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_L2" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_L2" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_L2" type="mesh" mesh="mesh_tip" pos="0.0477 -0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_L2" type="sphere" pos="0.0477 -0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_L2" type="sphere" pos="0.0477 -0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
@@ -126,7 +136,8 @@
 
       <!-- ========== 左後足 (L3) ========== -->
       <body name="mount_L3" pos="-0.0835  0.0630 -0.010" euler="0 0 135.0">
-        <site name="tag_L3" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_L3_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_L3" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_L3" pos="0 0 0">
@@ -136,17 +147,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_L3" pos="0.043 0 0">
             <joint name="joint_L3_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_L3_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_L3" type="mesh" mesh="mesh_left_femur" pos="-0.0009 -0.0118 -0.0018" euler="90 0 35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_L3" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_L3" pos="0.065 0 0.046">
               <joint name="joint_L3_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_L3_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_L3" type="mesh" mesh="mesh_left_tibia" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_L3" type="mesh" mesh="mesh_left_shield" pos="0.0490 -0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_L3" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_L3" type="capsule" fromto="0 0 0 0.0477 -0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_L3" type="mesh" mesh="mesh_tip" pos="0.0477 -0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_L3" type="sphere" pos="0.0477 -0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_L3" type="sphere" pos="0.0477 -0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
@@ -154,7 +169,8 @@
 
       <!-- ========== 右前足 (R1) ========== -->
       <body name="mount_R1" pos="0.0835 -0.0630 -0.010" euler="0 0 -45.0">
-        <site name="tag_R1" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_R1_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_R1" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_R1" pos="0 0 0">
@@ -164,17 +180,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_R1" pos="0.043 0 0">
             <joint name="joint_R1_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_R1_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_R1" type="mesh" mesh="mesh_right_femur" pos="-0.0020 -0.0118 -0.0003" euler="-90 0 -35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_R1" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_R1" pos="0.065 0 0.046">
               <joint name="joint_R1_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_R1_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_R1" type="mesh" mesh="mesh_right_tibia" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_R1" type="mesh" mesh="mesh_right_shield" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_R1" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_R1" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_R1" type="mesh" mesh="mesh_tip" pos="0.0477  0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_R1" type="sphere" pos="0.0477  0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_R1" type="sphere" pos="0.0477  0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
@@ -182,7 +202,8 @@
 
       <!-- ========== 右中足 (R2) ========== -->
       <body name="mount_R2" pos="0.0000 -0.0815 -0.010" euler="0 0 -90.0">
-        <site name="tag_R2" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_R2_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_R2" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_R2" pos="0 0 0">
@@ -192,17 +213,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_R2" pos="0.043 0 0">
             <joint name="joint_R2_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_R2_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_R2" type="mesh" mesh="mesh_right_femur" pos="-0.0020 -0.0118 -0.0003" euler="-90 0 -35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_R2" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_R2" pos="0.065 0 0.046">
               <joint name="joint_R2_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_R2_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_R2" type="mesh" mesh="mesh_right_tibia" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_R2" type="mesh" mesh="mesh_right_shield" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_R2" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_R2" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_R2" type="mesh" mesh="mesh_tip" pos="0.0477  0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_R2" type="sphere" pos="0.0477  0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_R2" type="sphere" pos="0.0477  0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
@@ -210,7 +235,8 @@
 
       <!-- ========== 右後足 (R3) ========== -->
       <body name="mount_R3" pos="-0.0835 -0.0630 -0.010" euler="0 0 -135.0">
-        <site name="tag_R3" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
+        <!-- 關節 1 參考點：Coxa Yaw 舵機軸心 (淺藍色參考球) -->
+        <site name="tag_R3_coxa" pos="0 0 0.02" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
         <geom name="col_base_R3" type="box" size="0.015 0.015 0.01" rgba="0 0 0 0" mass="0.02" group="3"/>
         <!-- 1. Coxa 轉向節 (Yaw): 43mm -->
         <body name="coxa_R3" pos="0 0 0">
@@ -220,17 +246,21 @@
           <!-- 2. Femur 大腿升降節 (Pitch): 80mm (Z 字形斜挑頂端 +46mm) -->
           <body name="femur_R3" pos="0.043 0 0">
             <joint name="joint_R3_femur" type="hinge" axis="0 1 0" range="-45 45" damping="0.1"/>
+            <!-- 關節 2 參考點：Femur Pitch 舵機軸心 (淺藍色參考球) -->
+            <site name="tag_R3_femur" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
             <geom name="vis_femur_R3" type="mesh" mesh="mesh_right_femur" pos="-0.0020 -0.0118 -0.0003" euler="-90 0 -35.26" material="mat_armor" contype="0" conaffinity="0" group="1"/>
             <geom name="col_femur_R3" type="capsule" fromto="0 0 0 0.065 0 0.046" size="0.011" mass="0.08" rgba="0 0 0 0" group="3"/>
             <!-- 3. Tibia 小腿屈伸節 (Pitch): 134mm -->
             <body name="tibia_R3" pos="0.065 0 0.046">
               <joint name="joint_R3_tibia" type="hinge" axis="0 1 0" range="-60 60" damping="0.1"/>
+              <!-- 關節 3 參考點：Tibia Knee Pitch 舵機軸心 (淺藍色參考球) -->
+              <site name="tag_R3_tibia" pos="0 0 0" size="0.005" rgba="0.2 0.8 1.0 0.8"/>
               <geom name="vis_tibia_R3" type="mesh" mesh="mesh_right_tibia" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_leg_dark" contype="0" conaffinity="0" group="1"/>
               <geom name="vis_shield_R3" type="mesh" mesh="mesh_right_shield" pos="0.0490  0.0070 0.0065" euler="0 0 180" material="mat_armor" contype="0" conaffinity="0" group="1"/>
-              <geom name="col_tibia_R3" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1077" size="0.009" mass="0.05" rgba="0 0 0 0" group="3"/>
-              <!-- 4. 足端觸地接觸球 (Foot Tip) -->
+              <geom name="col_tibia_R3" type="capsule" fromto="0 0 0 0.0477  0.0025 -0.1059" size="0.0048" mass="0.05" rgba="0 0 0 0" group="3"/>
+              <!-- 4. 足端觸地接觸球 (Foot Tip: 視覺 4.2mm 網格 + 校準 4.8mm 接觸球，零懸空、零穿模破圖) -->
               <geom name="vis_tip_R3" type="mesh" mesh="mesh_tip" pos="0.0477  0.0025 -0.1077" material="mat_rubber" contype="0" conaffinity="0" group="1"/>
-              <geom name="tip_R3" type="sphere" pos="0.0477  0.0025 -0.1077" size="0.010" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.01 1" solimp="0.9 0.95 0.001" group="3"/>
+              <geom name="tip_R3" type="sphere" pos="0.0477  0.0025 -0.1059" size="0.0048" mass="0.01" material="mat_rubber" friction="1.2 0.05 0.001" solref="0.002 1" solimp="0.95 0.99 0.0005 0.5 2" group="3"/>
             </body>
           </body>
         </body>
