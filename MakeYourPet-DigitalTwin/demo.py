@@ -248,15 +248,15 @@ def main():
             # 檢測 5 鍵觸發 50cm 爆發大跳 (單擊防抖動)
             k5_down = is_key_down(VK_5) or is_key_down(VK_NUMPAD5)
             if k5_down and not key_5_prev:
-                if jump_ctrl.trigger(power=1.0):
-                    print("\n  [動作] ⚡ 【5 鍵 50cm+ 爆發大跳】激發！全六足同步蓄力起跳！")
+                if jump_ctrl.trigger(power=1.15):
+                    print("\n  [動作] ⚡ 【5 鍵 50cm 爆發大跳】激發！全六足同步蓄力起跳！")
             key_5_prev = k5_down
 
             # 檢測 6 鍵觸發 70cm 火箭超跳 (單擊防抖動)
             k6_down = is_key_down(VK_6) or is_key_down(VK_NUMPAD6)
             if k6_down and not key_6_prev:
-                if jump_ctrl.trigger(power=1.4):
-                    print("\n  [動作] 🔥 【6 鍵 70cm+ 火箭超跳】激發！全六足極限全功率飛躍！")
+                if jump_ctrl.trigger(power=1.35):
+                    print("\n  [動作] 🔥 【6 鍵 70cm 火箭超跳】激發！全六足極限全功率飛躍！")
             key_6_prev = k6_down
 
             # 檢測升速檔鍵 (+ / ] / NumPad +)

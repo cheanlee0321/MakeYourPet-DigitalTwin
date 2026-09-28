@@ -50,8 +50,8 @@ class JumpController:
 
         # 各階段關節目標角度 (rad): [coxa, femur, tibia]
         self.q_nominal = np.array([0.0,  0.00,  0.00], dtype=np.float32)
-        # 1. 安全深蹲：電池艙保留 >3.4cm 淨空，絕不撞地
-        self.q_crouch  = np.array([0.0, -0.17,  0.00], dtype=np.float32)
+        # 1. 零滑移深蹲幾何：Femur -0.15rad 同步 Tibia +0.075rad 補償，足端水平位移 0.01mm (完全消除滑移摩擦應力)
+        self.q_crouch  = np.array([0.0, -0.15,  0.075], dtype=np.float32)
         # 2. 全衝程爆發蹬伸：桿件向垂直最大伸展，做功衝程 8.6cm
         self.q_thrust  = np.array([0.0,  0.78, -0.25], dtype=np.float32)
         # 3. 騰空主動伸足：足端向下延伸迎接地面，腳掌先落地保護腹部
@@ -66,28 +66,55 @@ class JumpController:
         """是否正在執行跳躍動作序列"""
         return self.state != JumpState.IDLE
 
-    def _set_burst_mode(self, enabled: bool):
-        """切換致動器瞬間爆發脈衝模式 (仿真實伺服馬達瞬間過載扭矩)"""
+    def _set_actuator_mode(self, mode: str):
+        """
+        切換致動器動態特性：
+        - 'burst': 起跳瞬間爆發脈衝 (Coxa 剛性鎖死防偏擺 + Femur/Tibia 強大推力)
+        - 'landing': 著地主動阻尼 (加大阻尼系數消散衝擊，避免反彈與走位)
+        - 'normal': 標準行走特性 (回復原始規格)
+        """
         if self.model is None or not self.enable_burst:
             return
 
-        if enabled:
-            # 依 power 調整爆發力矩：power=1.0 為 15.0 N*m，power=1.25 為 18.0 N*m+
+        if mode == "burst":
             burst_force = 15.0 * self.power
             kp = burst_force * 3.5
             kv = 0.3
             for i in range(self.model.nu):
-                name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-                if '_f' in name or '_t' in name or i % 3 != 0:
+                if i % 3 == 0:
+                    # Coxa 基節鎖定：高剛度 + 高阻尼，鎖死偏航角，防起跳與著地偏擺
+                    self.model.actuator_forcerange[i] = [-15.0, 15.0]
+                    self.model.actuator_gainprm[i, 0] = 60.0
+                    self.model.actuator_biasprm[i, 1] = -60.0
+                    self.model.actuator_biasprm[i, 2] = -2.5
+                else:
                     self.model.actuator_forcerange[i] = [-burst_force, burst_force]
                     self.model.actuator_gainprm[i, 0] = kp
                     self.model.actuator_biasprm[i, 1] = -kp
                     self.model.actuator_biasprm[i, 2] = -kv
+        elif mode == "landing":
+            for i in range(self.model.nu):
+                if i % 3 == 0:
+                    # Coxa 維持鎖定，防落地衝擊震偏
+                    self.model.actuator_forcerange[i] = [-15.0, 15.0]
+                    self.model.actuator_gainprm[i, 0] = 60.0
+                    self.model.actuator_biasprm[i, 1] = -60.0
+                    self.model.actuator_biasprm[i, 2] = -2.5
+                else:
+                    # 主動著地阻尼：增強阻尼 kv=3.5，迅速吸收落地動能
+                    self.model.actuator_forcerange[i] = [-10.0, 10.0]
+                    self.model.actuator_gainprm[i, 0] = 25.0
+                    self.model.actuator_biasprm[i, 1] = -25.0
+                    self.model.actuator_biasprm[i, 2] = -3.5
         else:
-            # 著地與常規行走回歸標準規格 (力矩 3.0 N*m, kp=12.0, kv=1.2)
+            # normal: 恢復標準出廠規格
             self.model.actuator_forcerange[:] = self.default_forcerange
             self.model.actuator_gainprm[:] = self.default_gainprm
             self.model.actuator_biasprm[:] = self.default_biasprm
+
+    def _set_burst_mode(self, enabled: bool):
+        """相容舊介面"""
+        self._set_actuator_mode("burst" if enabled else "normal")
 
     def trigger(self, power: float = 1.0) -> bool:
         """觸發立定跳躍 (power=1.0: 55cm 大跳; power=1.25: 70cm 火箭超跳)"""
@@ -100,7 +127,7 @@ class JumpController:
 
     def reset(self):
         """強制重置跳躍控制器為待命狀態並恢復標準電機規格"""
-        self._set_burst_mode(False)
+        self._set_actuator_mode("normal")
         self.state = JumpState.IDLE
         self.state_time = 0.0
 
@@ -121,21 +148,35 @@ class JumpController:
         q_target_recover[2] += offset_tibia
 
         if self.state == JumpState.CROUCH:
-            # 1. 安全深蹲蓄力階段：線性平穩下壓，底盤離地 >3.4cm
+            # 1. 零滑移深蹲蓄力階段：足端零位移，平穩蓄力下壓
             alpha = min(1.0, self.state_time / self.t_crouch)
             leg_q = (1.0 - alpha) * q_target_recover + alpha * self.q_crouch
             if self.state_time >= self.t_crouch:
                 self.state = JumpState.THRUST
                 self.state_time = 0.0
-                self._set_burst_mode(True)  # 瞬間啟用爆發脈衝！
+                self._set_actuator_mode("burst")  # 瞬間啟用爆發脈衝 + Coxa 基節鎖定！
 
         elif self.state == JumpState.THRUST:
-            # 2. 瞬間爆發蹬地：全衝程向下猛烈推進
-            leg_q = self.q_thrust
-            if self.state_time >= self.t_thrust:
+            # 2. 柔化爆發蹬地：平滑過渡 (25ms 快速線性爬升)，消除無窮大加速度衝擊與單側脈衝噪聲
+            t_ramp = 0.025
+            alpha = min(1.0, self.state_time / t_ramp)
+            leg_q = (1.0 - alpha) * self.q_crouch + alpha * self.q_thrust
+
+            # 【步驟 2：智慧離地即時切斷 (Liftoff Cutoff)】
+            # 當機身向上升空離地 (z > 0.108m 或 垂直向上速度 vz > 1.8 且足端已脫離地面)，立即切斷爆發推力
+            is_liftoff = False
+            if data is not None and self.state_time >= 0.04:
+                z = float(data.qpos[2])
+                vz = float(data.qvel[2])
+                if vz > 1.8:
+                    n_feet_touch = sum(1 for c in range(data.ncon) if data.contact[c].geom1 in self.tip_ids or data.contact[c].geom2 in self.tip_ids)
+                    if z >= 0.108 or n_feet_touch == 0:
+                        is_liftoff = True
+
+            if is_liftoff or self.state_time >= self.t_thrust:
                 self.state = JumpState.FLIGHT
                 self.state_time = 0.0
-                self._set_burst_mode(False) # 離地騰空，恢復標準柔順阻尼以備著地
+                self._set_actuator_mode("normal") # 離地騰空，立即切斷爆發推力，嚴防單側延遲蹬地踹翻機身！
 
         elif self.state == JumpState.FLIGHT:
             # 3. 騰空期主動伸腿迎接地面：足端向下延伸，保證腳掌先觸地
@@ -158,14 +199,16 @@ class JumpController:
             if is_touchdown or self.state_time >= self.t_flight_max:
                 self.state = JumpState.LANDING
                 self.state_time = 0.0
+                self._set_actuator_mode("landing") # 切換主動著地阻尼吸震！
 
         elif self.state == JumpState.LANDING:
-            # 4. 著地吸震復位：利用電機阻尼平順壓縮回歸常態站姿，腹部全程懸空
+            # 4. 著地吸震復位：利用電機高阻尼平順壓縮回歸常態站姿，腹部全程懸空
             alpha = min(1.0, self.state_time / self.t_landing)
             leg_q = (1.0 - alpha) * self.q_flight + alpha * q_target_recover
             if self.state_time >= self.t_landing:
                 self.state = JumpState.IDLE
                 self.state_time = 0.0
+                self._set_actuator_mode("normal") # 吸震完成，回歸常規行走電機規格
                 leg_q = q_target_recover
 
         # 六足同動：擴展至 18 維關節陣列

@@ -34,8 +34,8 @@ def run_dual_jump_test():
     dt = 0.02
 
     modes = [
-        ("【Mode 1: 50cm 爆發大跳 (按鍵 5)】", 1.0),
-        ("【Mode 2: 70cm 火箭超跳 (Shift + 5)】", 1.4),
+        ("【Mode 1: 50cm 爆發大跳 (按鍵 5)】", 1.15),
+        ("【Mode 2: 70cm 火箭超跳 (按鍵 6)】", 1.35),
     ]
 
     for mode_name, power in modes:
@@ -65,7 +65,7 @@ def run_dual_jump_test():
         flight_steps = 0
         touchdown_height = 0.0
 
-        for step in range(80): # 最多 1.6 秒
+        for step in range(100): # 最多 2.0 秒充足吸震復原
             q_jump = jc.step(data=data)
             if q_jump is None:
                 break
