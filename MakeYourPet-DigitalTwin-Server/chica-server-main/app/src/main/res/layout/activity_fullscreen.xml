@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" android:keepScreenOn="true"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:orientation="horizontal" android:background="@android:color/black" android:layout_width="match_parent" android:layout_height="50.0dp">
+            <Button android:enabled="false" android:id="@+id/buttonCamera" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Camera" android:layout_weight="1.0" android:layout_marginEnd="8.0dp" />
+            <Button android:id="@+id/buttonPrivacyPolicy" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Policy" android:layout_weight="1.0" android:layout_marginEnd="8.0dp" />
+            <Button android:id="@+id/buttonConfig" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Config" android:layout_weight="1.0" />
+        </LinearLayout>
+        <com.makeyourpet.chicaserver.InfoSurfaceView android:id="@+id/infoSurfaceView" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_weight="1.0" />
+        <View android:id="@+id/cameraView" android:layout_width="match_parent" android:layout_height="0.0px" />
+        <LinearLayout android:gravity="bottom" android:layout_gravity="bottom" android:orientation="horizontal" android:background="@android:color/black" android:layout_width="match_parent" android:layout_height="50.0dp">
+            <Button android:id="@+id/buttonBlock" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Block" android:layout_weight="1.0" android:layout_marginEnd="8.0dp" />
+            <Button android:id="@+id/buttonTorque" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Torque" android:layout_weight="1.0" android:layout_marginEnd="8.0dp" />
+            <Button android:id="@+id/buttonExit" android:layout_width="wrap_content" android:layout_height="match_parent" android:text="Exit" android:layout_weight="1.0" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

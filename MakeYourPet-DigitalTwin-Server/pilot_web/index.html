@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>MakeYourPet Pilot HUD | Hexapod Teleop Cockpit</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="landscape-warning" class="landscape-warning">
+        <div class="warning-icon">📱 ⟳</div>
+        <h2>Please Rotate to Landscape</h2>
+        <p>For the optimal dual-joystick handling and tactical HUD view, please hold your phone in landscape orientation.</p>
+    </div>
+
+    <div class="pilot-container">
+        <!-- Top Tactical Status Bar -->
+        <header class="tactical-header">
+            <div class="header-left">
+                <div class="brand">
+                    <span class="brand-logo">◆</span>
+                    <span class="brand-title">MAKE YOUR PET</span>
+                    <span class="brand-tag">PILOT HUD v2.0</span>
+                </div>
+                <div class="status-badges">
+                    <div id="chica-status" class="badge badge-offline">
+                        <span class="dot"></span>
+                        <span class="label">ROBOT: OFFLINE</span>
+                    </div>
+                    <div id="ws-status" class="badge badge-offline">
+                        <span class="dot"></span>
+                        <span class="label">LINK: DISCONNECTED</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="gait-selector-group">
+                    <button id="btn-mode-onnx" class="mode-tab active" data-mode="onnx">
+                        <span class="icon">🧠</span> ONNX AI Gait
+                    </button>
+                    <button id="btn-mode-tripod" class="mode-tab" data-mode="tripod">
+                        <span class="icon">📐</span> Analytical Tripod Gait
+                    </button>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button id="btn-torque" class="tactical-btn btn-torque" title="Toggle Servo Power Relay">
+                    <span class="btn-icon">⚡</span>
+                    <span id="torque-text">RELAY: OFF</span>
+                </button>
+                <button id="btn-stand" class="tactical-btn btn-stand" title="Toggle Stand/Sit Posture">
+                    <span class="btn-icon">🦿</span>
+                    <span id="stand-text">SIT</span>
+                </button>
+                <button id="btn-estop" class="tactical-btn btn-estop" title="Emergency Power Cutoff (E-Stop)">
+                    <span class="btn-icon">🛑</span>
+                    <span>E-STOP</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Central Tactical HUD Dashboard -->
+        <main class="hud-dashboard">
+            <!-- Battery Voltage Card -->
+            <section class="hud-card card-voltage">
+                <div class="card-header">
+                    <span class="card-icon">🔋</span>
+                    <span class="card-title">BATTERY VOLTAGE</span>
+                    <span id="volt-zone" class="zone-badge zone-ok">NORMAL</span>
+                </div>
+                <div class="card-body">
+                    <div class="numeric-display">
+                        <span id="val-voltage" class="main-val">--.-</span>
+                        <span class="unit">V</span>
+                    </div>
+                    <div class="meter-bar">
+                        <div id="bar-voltage" class="meter-fill" style="width: 0%;"></div>
+                        <div class="threshold-line th-warn" title="Warning Threshold 6.4V"></div>
+                        <div class="threshold-line th-cutoff" title="Cutoff Threshold 6.0V"></div>
+                    </div>
+                    <div class="card-footer">
+                        <span>2S LiPo: 6.0V ~ 8.4V</span>
+                        <span id="val-cell">~ -.-V / cell</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Hexapod Ground Contact Card -->
+            <section class="hud-card card-hexapod">
+                <div class="card-header">
+                    <span class="card-icon">🕷️</span>
+                    <span class="card-title">LEG CONTACTS (LEGS)</span>
+                    <span id="bps-tag" class="bps-tag">0 BPS</span>
+                </div>
+                <div class="card-body hexapod-diagram">
+                    <!-- Left Three Legs -->
+                    <div class="leg-column leg-left">
+                        <div id="leg-L1" class="leg-node">
+                            <span class="leg-id">L1</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                        <div id="leg-L2" class="leg-node">
+                            <span class="leg-id">L2</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                        <div id="leg-L3" class="leg-node">
+                            <span class="leg-id">L3</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Robot Body Silhouette -->
+                    <div class="chassis-core">
+                        <div class="chassis-heading">▲ FRONT</div>
+                        <div class="chassis-body">
+                            <div class="chassis-icon">MAKE YOUR PET</div>
+                            <div id="deadman-indicator" class="deadman-badge brake">
+                                <span class="indicator-pulse"></span>
+                                <span id="deadman-text">BRAKE (STOP)</span>
+                            </div>
+                        </div>
+                        <div class="chassis-rear">▼ REAR</div>
+                    </div>
+
+                    <!-- Right Three Legs -->
+                    <div class="leg-column leg-right">
+                        <div id="leg-R1" class="leg-node">
+                            <span class="leg-id">R1</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                        <div id="leg-R2" class="leg-node">
+                            <span class="leg-id">R2</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                        <div id="leg-R3" class="leg-node">
+                            <span class="leg-id">R3</span>
+                            <span class="leg-state">--</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Load Current Card -->
+            <section class="hud-card card-current">
+                <div class="card-header">
+                    <span class="card-icon">⚡</span>
+                    <span class="card-title">TOTAL CURRENT</span>
+                    <span id="curr-zone" class="zone-badge zone-ok">IDLE</span>
+                </div>
+                <div class="card-body">
+                    <div class="numeric-display">
+                        <span id="val-current" class="main-val">--.-</span>
+                        <span class="unit">A</span>
+                    </div>
+                    <div class="meter-bar">
+                        <div id="bar-current" class="meter-fill current-fill" style="width: 0%;"></div>
+                        <div class="threshold-line th-curr-warn" title="Overcurrent Warning 8.0A"></div>
+                        <div class="threshold-line th-curr-cutoff" title="Stall Cutoff 10.0A"></div>
+                    </div>
+                    <div class="card-footer">
+                        <span>Max Stall: 10.0A (2s Cutoff)</span>
+                        <span id="curr-warn-text">NORMAL</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Auxiliary Switches & Mode Bar -->
+        <nav class="sub-controls-bar">
+            <div class="sub-toggle-group">
+                <button id="btn-crab" class="sub-toggle" title="Lateral Crab Walk Mode">
+                    CRAB MODE: <span id="crab-text">OFF</span>
+                </button>
+                <button id="btn-clearance" class="sub-toggle" title="High Ground Clearance Mode">
+                    HIGH CLEARANCE: <span id="clearance-text">OFF</span>
+                </button>
+                <button id="btn-calibrate" class="sub-toggle btn-sub-action" title="Run Ground Contact Calibration">
+                    CALIBRATE
+                </button>
+            </div>
+            <div class="speed-slider-group">
+                <span class="slider-label">SPEED GAIN:</span>
+                <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="1.0">
+                <span id="speed-val" class="slider-val">1.0x</span>
+            </div>
+        </nav>
+
+        <!-- Dual Virtual Joystick Controls (Touch Joysticks) -->
+        <footer class="joysticks-container">
+            <!-- Left Joystick (Translation: Vx, Vy) -->
+            <div class="joystick-zone left-zone">
+                <div class="joystick-card">
+                    <div class="joystick-title">
+                        <span class="joy-name">TRANSLATION (Left)</span>
+                        <span id="left-readout" class="joy-readout">Vx: 0.00 | Vy: 0.00</span>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="joystick-left" width="220" height="220"></canvas>
+                        <div class="crosshair-h"></div>
+                        <div class="crosshair-v"></div>
+                    </div>
+                    <div class="joystick-hint">▲ Forward / ▼ Backward / ◄► Lateral</div>
+                </div>
+            </div>
+
+            <!-- Central Command Stream Indicator -->
+            <div class="joystick-center-info">
+                <div class="deadman-switch-box">
+                    <div class="deadman-title">DEADMAN SWITCH</div>
+                    <div class="deadman-desc">Deadman Protection Active</div>
+                    <div id="cmd-stream" class="cmd-stream">IDLE</div>
+                </div>
+            </div>
+
+            <!-- Right Joystick (Rotation: Yaw Rate) -->
+            <div class="joystick-zone right-zone">
+                <div class="joystick-card">
+                    <div class="joystick-title">
+                        <span class="joy-name">ROTATION (Right)</span>
+                        <span id="right-readout" class="joy-readout">Yaw: 0.00 rad/s</span>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="joystick-right" width="220" height="220"></canvas>
+                        <div class="crosshair-h"></div>
+                        <div class="crosshair-v"></div>
+                    </div>
+                    <div class="joystick-hint">◄ Counter-Clockwise / Clockwise ►</div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

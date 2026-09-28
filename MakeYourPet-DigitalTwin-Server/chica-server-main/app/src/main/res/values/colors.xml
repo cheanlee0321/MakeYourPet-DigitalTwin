@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Blue accent for the rebuild. The original used the stock Material purple
+         (#6200ee); the rebuild deliberately swaps it to blue so the two builds are
+         visually distinguishable while everything else stays source-accurate. -->
+    <color name="blue_200">#ff90caf9</color>
+    <color name="blue_500">#ff2196f3</color>
+    <color name="blue_700">#ff1976d2</color>
+</resources>

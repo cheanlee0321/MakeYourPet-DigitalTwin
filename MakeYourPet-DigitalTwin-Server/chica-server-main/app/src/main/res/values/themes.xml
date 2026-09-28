@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The original app used @style/Theme.MaterialComponents directly (stock
+         purple accent). The rebuild keeps that theme but overrides the accent
+         colors to blue, so AppCompat's view-inflater tints the buttons blue. -->
+    <style name="Theme.ChicaServer" parent="Theme.MaterialComponents">
+        <item name="colorPrimary">@color/blue_500</item>
+        <item name="colorPrimaryVariant">@color/blue_700</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/blue_200</item>
+        <item name="colorSecondaryVariant">@color/blue_700</item>
+        <item name="colorOnSecondary">@android:color/black</item>
+        <item name="colorAccent">@color/blue_500</item>
+        <item name="colorButtonNormal">@color/blue_500</item>
+    </style>
+</resources>

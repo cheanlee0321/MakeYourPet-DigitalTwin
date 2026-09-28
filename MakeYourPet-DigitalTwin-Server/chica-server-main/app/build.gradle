@@ -1,0 +1,52 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.makeyourpet.chicaserver"
+    compileSdk 35
+    // Any modern NDK compiles the C++17 gait code identically. Pinned so CI /
+    // fresh checkouts are reproducible; install with:
+    //   sdkmanager "ndk;29.0.14206865"
+    ndkVersion "29.0.14206865"
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    defaultConfig {
+        applicationId "com.makeyourpet.chicaserver"
+        minSdk 23
+        targetSdk 33
+        versionCode 6
+        versionName "0.0.5-alpha"
+        buildConfigField "boolean", "MOTION_TRACE_ENABLED",
+                (project.findProperty("motionTrace") ?: "false").toString()
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -Wall -Wextra -Wno-unused-parameter"
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "com.google.android.material:material:1.7.0"
+    implementation "com.github.mik3y:usb-serial-for-android:3.10.0"
+
+    // ONNX Runtime Android lightweight inference engine (supports arm64-v8a and armeabi-v7a)
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.17.1"
+}
