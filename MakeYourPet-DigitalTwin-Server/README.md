@@ -1,5 +1,12 @@
 # Make Your Pet Hexapod - Dual-Phone AI Locomotion System
 
+> [!WARNING]
+> **Experimental Project & Upstream Notice / 專案聲明與實測提醒**:
+> - This server implementation is built upon [eternalnitrous/chica-server](https://github.com/eternalnitrous/chica-server).
+> - **Hardware Status**: This system has undergone virtual closed-loop simulation and software emulation, but **has not yet been validated on physical hardware** (尚未通過實體測試).
+> 
+> 本伺服器系統架構是基於 [eternalnitrous/chica-server](https://github.com/eternalnitrous/chica-server) 進行建構與二次開發。目前已完成全鏈路虛擬閉環模擬測試，**尚未通過實體硬體測試**，實機部署時請注意安全防護與限流保護。
+
 This repository hosts the **Dual-Phone AI Locomotion & Digital Twin Architecture** for the Make Your Pet Hexapod robot. It bridges edge reinforcement learning (PPO policy via ONNX Runtime Mobile) with real-time web telemetry and virtual hardware emulation.
 
 ---
