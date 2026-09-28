@@ -1,13 +1,15 @@
 """
 Train Jump: 18 自由度六足機器人立定跳躍殘差強化學習訓練腳本 (PPO)
-==============================================================
+            18-DoF Hexapod Standing Jump Residual RL Training Script (PPO)
+==========================================================================
 基於數字 5 行為 (JumpController 標稱軌跡)，使用 PPO 訓練 18 軸殘差補償神經網路。
+Trains an 18-axis residual compensation neural network using PPO on top of Key 5 behavior (JumpController nominal trajectory).
 
-特色：
-- 平行加速：支援多進程 SubprocVecEnv (預設 8~12 平行物理環境)
-- 專屬評估：定期執行確定性評估，追蹤起跳高度、空中翻滾抑制率與落地平穩度
-- 自動保存：自動儲存 Best Model 與階段性 Checkpoint
-- 支援地形模式：flat (平地), uneven (起伏), bumps (波浪), slope (微坡), platform (台階)
+特色 / Features:
+- 平行加速：支援多進程 SubprocVecEnv (預設 8~12 平行物理環境) / Parallel acceleration: supports multi-process SubprocVecEnv (default 8-12 parallel environments)
+- 專屬評估：定期執行確定性評估，追蹤起跳高度、空中翻滾抑制率與落地平穩度 / Dedicated evaluation: periodic deterministic evaluation tracking jump height, roll suppression, and landing stability
+- 自動保存：自動儲存 Best Model 與階段性 Checkpoint / Auto saving: automatically saves Best Model and periodic checkpoints
+- 支援地形模式：flat (平地), uneven (起伏), bumps (波浪), slope (微坡), platform (台階) / Supported terrains: flat, uneven, bumps, slope, platform
 """
 
 import os
@@ -26,6 +28,7 @@ import gymnasium as gym
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
+from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback, CallbackList
 try:
     from .hexapod_jump_env import HexapodJumpEnv
 except (ImportError, ValueError):
@@ -41,7 +44,7 @@ def make_jump_env(
     jump_power: float = 1.15,
     residual_scale: float = 0.15,
 ):
-    """建立包含獨立隨機種子與地貌設定的跳躍環境工廠函數"""
+    """建立包含獨立隨機種子與地貌設定的跳躍環境工廠函數 / Jump environment factory function creating envs with independent seeds and terrain settings"""
     def _init():
         env = HexapodJumpEnv(
             domain_randomization=domain_rand,
@@ -98,7 +101,7 @@ def main():
     print(f"[配置] 學習率 / 熵係數: {args.lr} / {args.ent_coef}")
     print(f"[配置] 採樣緩衝區:      {args.num_envs} envs x {args.n_steps} steps = {args.num_envs * args.n_steps:,} 步/輪")
 
-    # 自動定位專案根目錄
+    # 自動定位專案根目錄 / Automatically locate project root directory
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if not os.path.exists(os.path.join(project_root, "models")):
         project_root = os.getcwd()
@@ -110,7 +113,7 @@ def main():
     os.makedirs(chkpt_dir, exist_ok=True)
     os.makedirs(best_model_dir, exist_ok=True)
 
-    # 1. 建立並行訓練環境
+    # 1. 建立並行訓練環境 / 1. Build parallel training environments
     print("\n[1/4] 正在啟動多進程跳躍模擬環境...")
     env = SubprocVecEnv([
         make_jump_env(
@@ -126,7 +129,7 @@ def main():
     ])
     env = VecMonitor(env)
 
-    # 2. 建立獨立評估環境 (關閉領域隨機化，測試策略基準泛化度)
+    # 2. 建立獨立評估環境 (關閉領域隨機化，測試策略基準泛化度) / 2. Build independent evaluation environment (domain randomization off for benchmark generalization)
     eval_env = SubprocVecEnv([
         make_jump_env(
             999,
@@ -141,7 +144,7 @@ def main():
     ])
     eval_env = VecMonitor(eval_env)
 
-    # 3. 設置回調機制
+    # 3. 設置回調機制 / 3. Set up callback mechanisms
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=best_model_dir,
@@ -161,7 +164,7 @@ def main():
 
     callbacks = CallbackList([eval_callback, checkpoint_callback])
 
-    # 4. 初始化神經網路架構
+    # 4. 初始化神經網路架構 / 4. Initialize neural network architecture
     print("[2/4] 初始化 PPO 神經網路策略架構...")
     policy_kwargs = dict(
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
@@ -197,7 +200,7 @@ def main():
             tensorboard_log=log_dir,
         )
 
-    # 5. 開始訓練迴圈
+    # 5. 開始訓練迴圈 / 5. Start training loop
     print("\n[3/4] 啟動強化學習訓練迴圈！")
     print(f"      可開啟另一個終端機執行：tensorboard --logdir={log_dir}")
     print(f"      瀏覽器開啟 http://localhost:6006 實時查看跳躍姿態穩定度與累積回報曲線。\n")
@@ -215,7 +218,7 @@ def main():
     elapsed_time = time.time() - start_time
     print(f"\n[4/4] 訓練完成！總耗時: {elapsed_time:.1f} 秒 ({elapsed_time/60:.2f} 分鐘)")
 
-    # 儲存最終模型
+    # 儲存最終模型 / Save final model
     final_model_path = os.path.join(project_root, "models", "jump_final_policy.zip")
     model.save(final_model_path)
     print(f"      [已儲存] 最終跳躍策略權重: {final_model_path}")

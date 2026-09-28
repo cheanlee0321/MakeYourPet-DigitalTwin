@@ -12,8 +12,8 @@
 ## 目錄 (Table of Contents)
 1. [環境準備與前置命令](#1-環境準備與前置命令)
 2. [電玩級 3D 遙控工作台 (`demo.py`)](#2-電玩級-3d-遙控工作台-demopy)
-3. [行走步態訓練模組 (`train_walking/`)](#3-行走步態訓練模組-train_walking)
-4. [立定跳躍殘差訓練模組 (`train_jumping/`)](#4-立定跳躍殘差訓練模組-train_jumping)
+3. [行走步態訓練模組 (`training1_walking/`)](#3-行走步態訓練模組-training1_walking)
+4. [立定跳躍殘差訓練模組 (`training2_jumping/`)](#4-立定跳躍殘差訓練模組-training2_jumping)
 5. [模型評估、驗證與導出](#5-模型評估驗證與導出)
 6. [TensorBoard 即時監控](#6-tensorboard-即時監控)
 7. [數位孿生 XML 重新編譯與影視腳本](#7-數位孿生-xml-重新編譯與影視腳本)
@@ -92,22 +92,22 @@ python <指令>
 
 ---
 
-## 3. 行走步態訓練模組 (`train_walking/`)
+## 3. 行走步態訓練模組 (`training1_walking/`)
 
 負責訓練六足機器人從解析三角步態逆向運動學（Feedforward）出發，學習應對任意向速度指令 $[v_x, v_y, \omega_z]$、複雜地形障礙與外力干擾的 18 自由度殘差網絡。
 
 ```powershell
 # 1. 標準百萬步行走訓練 (12 個平行環境，平坦地面)
-.\hexapod_rl_env\Scripts\python.exe train_walking/train.py --timesteps 1000000 --num-envs 12
+.\hexapod_rl_env\Scripts\python.exe training1_walking/train.py --timesteps 1000000 --num-envs 12
 
 # 2. 越野公園地貌複合進階訓練
-.\hexapod_rl_env\Scripts\python.exe train_walking/train.py --timesteps 1500000 --num-envs 12 --terrain park --terrain-height 0.035
+.\hexapod_rl_env\Scripts\python.exe training1_walking/train.py --timesteps 1500000 --num-envs 12 --terrain park --terrain-height 0.035
 
 # 3. 接續先前權重繼續強化訓練
-.\hexapod_rl_env\Scripts\python.exe train_walking/train.py --resume models/best_model/best_model.zip --timesteps 500000
+.\hexapod_rl_env\Scripts\python.exe training1_walking/train.py --resume models/best_model/best_model.zip --timesteps 500000
 ```
 
-### `train_walking/train.py` 常用參數
+### `training1_walking/train.py` 常用參數
 
 | 參數 | 預設值 | 說明 |
 | :--- | :---: | :--- |
@@ -124,22 +124,22 @@ python <指令>
 
 ---
 
-## 4. 立定跳躍殘差訓練模組 (`train_jumping/`)
+## 4. 立定跳躍殘差訓練模組 (`training2_jumping/`)
 
 以數字 5 鍵標稱跳躍軌跡為參考前饋，利用強化學習自主學習騰空姿態陀螺儀抑制、對稱發力微調與著地動態柔順阻尼。
 
 ```powershell
 # 1. 啟動標準立定跳躍殘差訓練 (8 個平行進程，30 萬步約 3.5 分鐘完訓)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/train_jump.py --timesteps 300000 --num-envs 8
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/train_jump.py --timesteps 300000 --num-envs 8
 
 # 2. 微起伏擾動地形抗摔強化訓練 (提升非平坦地面著地平衡能力)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/train_jump.py --terrain uneven --terrain-height 0.020 --timesteps 400000
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/train_jump.py --terrain uneven --terrain-height 0.020 --timesteps 400000
 
 # 3. 調整基準起跳力度 (預設 1.15 對應 5 鍵 50cm 高跳，可調至 1.35 對應火箭超跳)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/train_jump.py --power 1.35 --timesteps 300000
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/train_jump.py --power 1.35 --timesteps 300000
 ```
 
-### `train_jumping/train_jump.py` 常用參數
+### `training2_jumping/train_jump.py` 常用參數
 
 | 參數 | 預設值 | 說明 |
 | :--- | :---: | :--- |
@@ -159,37 +159,37 @@ python <指令>
 
 ```powershell
 # 純終端數據評估 (5 回合)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/test_jump_policy.py --episodes 5
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/test_jump_policy.py --episodes 5
 
 # 指定模型權重與地形測試
-.\hexapod_rl_env\Scripts\python.exe train_jumping/test_jump_policy.py --model models/jump_best_model/best_model.zip --terrain uneven
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/test_jump_policy.py --model models/jump_best_model/best_model.zip --terrain uneven
 
 # 啟用 3D 視窗即時觀察跳躍著地細節
-.\hexapod_rl_env\Scripts\python.exe train_jumping/test_jump_policy.py --render --episodes 3
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/test_jump_policy.py --render --episodes 3
 ```
 
 ### 2. 行走步態指令跟隨 5 項情境驗證
 自動依序測試：①煞車待命 $\rightarrow$ ②前進巡航 $\rightarrow$ ③原地左轉 $\rightarrow$ ④原地右轉 $\rightarrow$ ⑤恢復待命：
 
 ```powershell
-.\hexapod_rl_env\Scripts\python.exe train_walking/verify_command_tracking.py
+.\hexapod_rl_env\Scripts\python.exe training1_walking/verify_command_tracking.py
 ```
 
 ### 3. 開環跳躍雙檔位物理極限測試
 快速檢驗 MuJoCo 物理引擎下的垂直初速、滯空時間與電池艙離地淨空：
 
 ```powershell
-.\hexapod_rl_env\Scripts\python.exe train_jumping/test_jump.py
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/test_jump.py
 ```
 
 ### 4. 跳躍環境單元測試 (5 大地貌自我檢驗)
 ```powershell
-.\hexapod_rl_env\Scripts\python.exe train_jumping/verify_jump_env.py
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/verify_jump_env.py
 ```
 
 ### 5. 步態策略 ONNX 導出 (供部署至邊緣設備如 Raspberry Pi / 伺服控制器)
 ```powershell
-.\hexapod_rl_env\Scripts\python.exe train_walking/export_onnx.py
+.\hexapod_rl_env\Scripts\python.exe training1_walking/export_onnx.py
 ```
 
 ---
@@ -220,7 +220,7 @@ tensorboard --logdir=tensorboard_logs/jump_ppo
 
 ### 2. 錄製關節運動軌跡 (供 Blender 影視級渲染)
 ```powershell
-.\hexapod_rl_env\Scripts\python.exe train_walking/record_trajectory.py
+.\hexapod_rl_env\Scripts\python.exe training1_walking/record_trajectory.py
 ```
 
 ### 3. Blender 影視級動畫合成輸出
@@ -238,11 +238,11 @@ tensorboard --logdir=tensorboard_logs/jump_ppo
 .\hexapod_rl_env\Scripts\python.exe demo.py
 
 # 🏋️ 重新訓練立定跳躍殘差策略 (3.5 分鐘)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/train_jump.py --timesteps 300000
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/train_jump.py --timesteps 300000
 
 # 📊 檢視跳躍性能評估報表 (平地 vs 越野)
-.\hexapod_rl_env\Scripts\python.exe train_jumping/test_jump_policy.py
+.\hexapod_rl_env\Scripts\python.exe training2_jumping/test_jump_policy.py
 
 # 🚶 驗證行走指令聽從度 (直行、倒車、左右原地旋轉)
-.\hexapod_rl_env\Scripts\python.exe train_walking/verify_command_tracking.py
+.\hexapod_rl_env\Scripts\python.exe training1_walking/verify_command_tracking.py
 ```

@@ -3,12 +3,14 @@ Test Jump Policy & Benchmark Evaluator for Make Your Pet Hexapod
 ================================================================
 對比評估【基準數字 5 行為 (純 FSM 開環)】vs【數字 5 + 殘差強化學習 (智慧閉環)】
 在各類地形 (flat, uneven, bumps, slope, platform) 與隨機外力干擾下的跳躍姿態穩定度。
+Comparative evaluation: [Baseline Key 5 behavior (Pure open-loop FSM)] vs [Key 5 + Residual RL (Smart closed-loop)]
+Jumping attitude stability across various terrains (flat, uneven, bumps, slope, platform) and random external disturbances.
 
-使用範例：
-  # 基準開環 vs 閉環對比評估 (終端遙測報表)
+使用範例 / Usage examples:
+  # 基準開環 vs 閉環對比評估 (終端遙測報表) / Baseline open-loop vs closed-loop comparative evaluation (terminal telemetry report)
   python test_jump_policy.py --model models/jump_best_model/best_model.zip
 
-  # 3D 視覺化單次跳躍展示
+  # 3D 視覺化單次跳躍展示 / 3D visualized single jump demonstration
   python test_jump_policy.py --model models/jump_best_model/best_model.zip --render --terrain uneven
 """
 
@@ -97,7 +99,7 @@ def evaluate_mode(mode_name: str, policy_fn, terrain: str, terrain_h: float, pow
 
             obs, reward, terminated, truncated, info = env.step(action)
 
-            # 遙測數據提取
+            # 遙測數據提取 / Extract telemetry data
             curr_h = info["height"]
             if curr_h > ep_peak_h:
                 ep_peak_h = curr_h
@@ -166,7 +168,7 @@ def evaluate_mode(mode_name: str, policy_fn, terrain: str, terrain_h: float, pow
 def main():
     args = parse_args()
 
-    # 1. 基準開環跳躍 (純數字 5 FSM 控制器，無殘差)
+    # 1. 基準開環跳躍 (純數字 5 FSM 控制器，無殘差) / 1. Baseline open-loop jump (Pure Key 5 FSM controller, no residual)
     res_baseline = evaluate_mode(
         mode_name="基準數字 5 行為 (純 FSM 開環)",
         policy_fn=None,
@@ -177,7 +179,7 @@ def main():
         render=args.render,
     )
 
-    # 2. 閉環殘差策略 (若有載入模型權重)
+    # 2. 閉環殘差策略 (若有載入模型權重) / 2. Closed-loop residual policy (if model weights loaded)
     res_residual = None
     model_path = args.model
     if model_path and not os.path.exists(model_path):
@@ -214,7 +216,7 @@ def main():
     else:
         print(f"\n[提示] 未指定或找不到模型權重檔案 ({args.model})，僅展示基準數字 5 開環評估結果。")
 
-    # 3. 輸出對比綜合報告表
+    # 3. 輸出對比綜合報告表 / 3. Output comprehensive comparison report table
     print("\n" + "=" * 78)
     print("               🏁 六足機器人跳躍姿態穩定性綜合對比報表")
     print("=" * 78)

@@ -25,7 +25,7 @@ def test_jump_env():
     states_seen = set()
 
     for step in range(env.max_steps):
-        # 測試微量殘差動作
+        # 測試微量殘差動作 / Test minor residual actions
         action = np.random.uniform(-0.1, 0.1, size=18).astype(np.float32)
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward

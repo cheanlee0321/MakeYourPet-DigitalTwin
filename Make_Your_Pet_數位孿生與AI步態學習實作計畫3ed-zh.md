@@ -101,20 +101,31 @@ Make Your Pet - Digital Twin/
 │   │   └── DEBUG/                              # 歷史除錯腳本與校正記錄
 │   │       └── test_kinematics_openloop.py     # 開環步態運動學校驗腳本
 │   │
-│   ├── tripod_kinematics.py           # 三角步態前饋運動學引擎
-│   ├── hexapod_env.py                 # Gymnasium 強化學習環境封裝
-│   ├── train.py                       # PPO 向量化平行訓練主程式
-│   ├── verify_command_tracking.py     # 指令跟隨性能驗證基準
-│   ├── demo.py                        # 3D 鍵盤即時遙控工作站
-│   ├── export_onnx.py                 # PPO Actor → ONNX 輕量模型導出腳本
-│   ├── generate_hexapod_xml.py        # 18 自由度 XML 動態產生與參數校準腳本
-│   ├── record_trajectory.py           # 50 FPS 步態軌跡錄製腳本（供 Blender 用）
-│   ├── blender_cinematic.py           # Blender 5.2 自動化電影級算圖腳本
-│   ├── make_video.py                  # 算圖影格合成 MP4 影片腳本
+│   ├── training1_walking/             # 行走步態訓練模組（三角逆向運動學、PPO 與 ONNX 導出）
+│   │   ├── hexapod_env.py             # Gymnasium 強化學習環境封裝器
+│   │   ├── tripod_kinematics.py       # 解析三角步態前饋運動學引擎
+│   │   ├── train.py                   # PPO 向量化平行訓練主程式
+│   │   ├── verify_command_tracking.py # 5 項情境閉環指令跟隨基準測試腳本
+│   │   ├── export_onnx.py             # PPO Actor → ONNX 輕量模型導出腳本
+│   │   └── record_trajectory.py       # 50 FPS 步態軌跡錄製腳本（供 Blender 用）
 │   │
+│   ├── training2_jumping/             # 立定跳躍殘差強化學習模組（FSM 控制與落地柔順阻尼）
+│   │   ├── hexapod_jump_env.py        # 78D 觀測空間跳躍 Gym 環境
+│   │   ├── jump_controller.py         # 多階段 FSM 爆發與著地動態控制器
+│   │   ├── train_jump.py              # PPO 跳躍殘差訓練主程式
+│   │   ├── test_jump_policy.py        # 開環 vs 閉環殘差評估報表工具
+│   │   └── test_jump.py               # 物理跳躍動力學極限測試腳本
+│   │
+│   ├── make_video/                    # 影視級渲染腳本目錄（Blender 5.2）
+│   │   ├── blender_cinematic.py       # Blender 5.2 自動化電影級算圖腳本
+│   │   └── make_video.py              # 算圖影格合成 MP4 影片腳本
+│   │
+│   ├── demo.py                        # 3D 鍵盤即時遙控工作站
+│   ├── generate_hexapod_xml.py        # 18 自由度 XML 動態產生與參數校準腳本
+│   ├── command_manual.md              # 完整命令行操作手冊
 │   ├── experiment_log.md              # 實驗日誌與里程碑追蹤表
 │   ├── KnownIssue.md                  # 全域已知問題快速導覽
-│   ├── LICENSE                        # Apache 2.0 開源授權
+│   ├── LICENSE                        # GPL-3.0 開源授權
 │   └── hexapod_rl_env/                # Python 虛擬環境（建議建於此目錄下）
 │
 ├── MakeYourPet-hexapod/               # 開源硬體原始資源與 CAD 檔案

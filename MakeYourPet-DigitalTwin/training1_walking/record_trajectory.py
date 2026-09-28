@@ -1,10 +1,14 @@
 """
 Make Your Pet - AI 步態軌跡錄製與 3D 資產導出器 (MuJoCo -> Blender 5.2)
-==================================================================
-職責：
+                AI gait trajectory recorder & 3D asset exporter (MuJoCo -> Blender 5.2)
+======================================================================================
+職責 / Responsibilities:
 1. 自動從 models/hexapod.xml 提取 11 個標準化 3D 網格，導出至 blender_assets/meshes/
+   Automatically extract 11 standardized 3D meshes from models/hexapod.xml and export to blender_assets/meshes/
 2. 載入訓練完成的 PPO 步態策略，執行無縫六足行走模擬 (50 FPS)
+   Load trained PPO gait policy and run seamless hexapod locomotion simulation (50 FPS)
 3. 導出每幀 32 個視覺零件的 6DoF 世界坐標與四元數姿態至 gait_trajectory.json
+   Export 6DoF world coordinates and quaternion poses of 32 visual parts per frame to gait_trajectory.json
 """
 
 import os
@@ -13,7 +17,7 @@ import json
 import argparse
 import numpy as np
 
-# 設置編碼支援
+# 設置編碼支援 / Set encoding support
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -23,7 +27,7 @@ from hexapod_env import HexapodEnv
 
 
 def export_mesh_objs(model: mujoco.MjModel, output_dir: str):
-    """從 MuJoCo 記憶體中導出 11 個已校準並縮放的乾淨 OBJ 網格"""
+    """從 MuJoCo 記憶體中導出 11 個已校準並縮放的乾淨 OBJ 網格 / Export 11 calibrated and scaled clean OBJ meshes from MuJoCo memory"""
     os.makedirs(output_dir, exist_ok=True)
     mesh_files = {}
 
@@ -47,7 +51,7 @@ def export_mesh_objs(model: mujoco.MjModel, output_dir: str):
             for v in verts:
                 f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
             for face in faces:
-                # Wavefront OBJ 索引從 1 開始
+                # Wavefront OBJ 索引從 1 開始 / Wavefront OBJ indices are 1-based
                 f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
 
         mesh_files[name] = obj_filename
@@ -63,16 +67,16 @@ def record_simulation(
     output_json: str = "gait_trajectory.json",
     assets_dir: str = "blender_assets",
 ):
-    """執行神經網絡策略推論並記錄完整步態姿態軌跡"""
+    """執行神經網絡策略推論並記錄完整步態姿態軌跡 / Execute neural network policy inference and record full gait pose trajectories"""
     mesh_dir = os.path.join(assets_dir, "meshes")
     env = HexapodEnv(domain_randomization=False, auto_resample_commands=False)
     m = env.model
     d = env.data
 
-    # 1. 導出乾淨 OBJ 幾何網格
+    # 1. 導出乾淨 OBJ 幾何網格 / 1. Export clean OBJ geometry meshes
     mesh_files = export_mesh_objs(m, mesh_dir)
 
-    # 2. 解析所有需要動畫驅動的視覺幾何體 (vis_*)
+    # 2. 解析所有需要動畫驅動的視覺幾何體 (vis_*) / 2. Parse all visual geoms requiring animation driving (vis_*)
     visual_geoms = []
     for i in range(m.ngeom):
         geom_name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, i)
@@ -82,14 +86,14 @@ def record_simulation(
             mat_id = m.geom_matid[i]
             mat_name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_MATERIAL, mat_id) if mat_id >= 0 else None
             
-            # 分類材質語義 (供 Blender 自動分配頂級 PBR 材質)
+            # 分類材質語義 (供 Blender 自動分配頂級 PBR 材質) / Classify material semantics (for Blender auto-assignment of PBR materials)
             mat_category = "frame"
             if "cover" in geom_name or "shield" in geom_name or "femur" in geom_name:
-                mat_category = "armor"  # 電競金/碳纖維外甲
+                mat_category = "armor"  # 電競金/碳纖維外甲 / Gaming gold / carbon fiber armor
             elif "tip" in geom_name:
-                mat_category = "rubber" # 防滑吸震橡膠
+                mat_category = "rubber" # 防滑吸震橡膠 / Anti-slip shock-absorbing rubber
             elif "coxa" in geom_name or "tibia" in geom_name:
-                mat_category = "leg_dark" # 陽極氧化黑金屬關節
+                mat_category = "leg_dark" # 陽極氧化黑金屬關節 / Anodized black metal joints
 
             visual_geoms.append({
                 "geom_id": i,
@@ -103,7 +107,7 @@ def record_simulation(
     policy = PPO.load(model_path, device="cpu")
     obs, _ = env.reset(seed=42)
 
-    fps = 50  # MuJoCo 控制週期 0.02s
+    fps = 50  # MuJoCo 控制週期 0.02s / MuJoCo control period 0.02s
     total_steps = int(duration_sec * fps)
     recorded_frames = []
 
@@ -112,7 +116,7 @@ def record_simulation(
     for step in range(total_steps):
         t = step / fps
 
-        # 動作模式軌跡指令設計
+        # 動作模式軌跡指令設計 / Action mode trajectory command design
         if motion_type == "forward":
             cmd = np.array([0.25, 0.0, 0.0], dtype=np.float32)
         elif motion_type == "sprint":
@@ -120,10 +124,10 @@ def record_simulation(
         elif motion_type == "turn":
             cmd = np.array([0.0, 0.0, 0.50], dtype=np.float32)
         elif motion_type == "combo":
-            # 影視級特寫動態組合：
-            # 0~1.5s: 昂首前進
-            # 1.5~3.5s: 流暢前進弧形轉彎
-            # 3.5~5.0s: 衝刺前進並平穩收步
+            # 影視級特寫動態組合： / Cinematic close-up dynamic combo:
+            # 0~1.5s: 昂首前進 / 0~1.5s: Forward head-up march
+            # 1.5~3.5s: 流暢前進弧形轉彎 / 1.5~3.5s: Smooth forward arc turn
+            # 3.5~5.0s: 衝刺前進並平穩收步 / 3.5~5.0s: Sprint forward and settle stably
             if t < 1.5:
                 cmd = np.array([0.25, 0.0, 0.0], dtype=np.float32)
             elif t < 3.5:
@@ -136,19 +140,19 @@ def record_simulation(
         env.command = cmd.copy()
         obs[-5:-2] = cmd
 
-        # AI 策略推論
+        # AI 策略推論 / AI policy inference
         action, _ = policy.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
 
-        # 記錄軀幹核心焦點位置 (供攝影機追蹤)
+        # 記錄軀幹核心焦點位置 (供攝影機追蹤) / Record trunk focus position (for camera tracking)
         trunk_pos = d.xpos[env.trunk_id].tolist()
 
-        # 記錄 32 個幾何體的 6DoF 姿態
+        # 記錄 32 個幾何體的 6DoF 姿態 / Record 6DoF poses of 32 geoms
         frame_geom_data = {}
         for g in visual_geoms:
             gid = g["geom_id"]
             pos = d.geom_xpos[gid].tolist()
-            # MuJoCo 矩陣轉四元數 [w, x, y, z]
+            # MuJoCo 矩陣轉四元數 [w, x, y, z] / Convert MuJoCo rotation matrix to quaternion [w, x, y, z]
             mujoco.mju_mat2Quat(quat_buffer, d.geom_xmat[gid])
             frame_geom_data[g["geom_name"]] = {
                 "pos": [round(v, 6) for v in pos],
@@ -169,7 +173,7 @@ def record_simulation(
 
     print(f"  ✓ 模擬錄製完成！共收錄 {len(recorded_frames)} 幀 (50 FPS, 前進距離: {d.xpos[env.trunk_id][0]:.3f}m)")
 
-    # 3. 匯總輸出至 JSON
+    # 3. 匯總輸出至 JSON / 3. Aggregate and export to JSON
     print(f"\n💾 [3/3] 正在寫入軌跡數據檔: {output_json}...")
     export_payload = {
         "metadata": {
@@ -205,7 +209,7 @@ def main():
                         help="輸出 JSON 軌跡檔名稱")
     args = parser.parse_args()
 
-    # 自動檢查模型路徑
+    # 自動檢查模型路徑 / Automatically check model paths
     candidate = args.model
     if not os.path.exists(candidate):
         alt = "models/hexapod_final_policy.zip"

@@ -23,7 +23,7 @@ def main():
     print("      六足機器人全自由度指令跟隨能力驗證 (5 項情境測試)")
     print("=" * 70)
 
-    # 情境 1: 煞車靜止待命
+    # 情境 1: 煞車靜止待命 / Scenario 1: Braking stand-by
     env.command = np.array([0.0, 0.0, 0.0], dtype=np.float32)
     obs, _ = env.reset(seed=42)
     obs[-5:-2] = env.command
@@ -33,7 +33,7 @@ def main():
         obs[-5:-2] = env.command
     print(f"情境 1 [煞車待命]: 目標=[ 0.00,  0.00] -> 實際 vx={info['vx']:+.4f} m/s, yaw={info['yaw_rate']:+.4f} rad/s, 高度={info['height']:.4f} m")
 
-    # 情境 2: 前進加速巡航
+    # 情境 2: 前進加速巡航 / Scenario 2: Forward acceleration cruise
     env.command = np.array([0.25, 0.0, 0.0], dtype=np.float32)
     for _ in range(100):
         action, _ = model.predict(obs, deterministic=True)
@@ -41,7 +41,7 @@ def main():
         obs[-5:-2] = env.command
     print(f"情境 2 [前進巡航]: 目標=[+0.25,  0.00] -> 實際 vx={info['vx']:+.4f} m/s, yaw={info['yaw_rate']:+.4f} rad/s, 高度={info['height']:.4f} m")
 
-    # 情境 3: 原地向左旋轉
+    # 情境 3: 原地向左旋轉 / Scenario 3: In-place left rotation
     env.command = np.array([0.0, 0.0, 0.5], dtype=np.float32)
     for _ in range(100):
         action, _ = model.predict(obs, deterministic=True)
@@ -49,7 +49,7 @@ def main():
         obs[-5:-2] = env.command
     print(f"情境 3 [原地左轉]: 目標=[ 0.00, +0.50] -> 實際 vx={info['vx']:+.4f} m/s, yaw={info['yaw_rate']:+.4f} rad/s, 高度={info['height']:.4f} m")
 
-    # 情境 4: 原地向右旋轉
+    # 情境 4: 原地向右旋轉 / Scenario 4: In-place right rotation
     env.command = np.array([0.0, 0.0, -0.5], dtype=np.float32)
     for _ in range(100):
         action, _ = model.predict(obs, deterministic=True)
@@ -57,7 +57,7 @@ def main():
         obs[-5:-2] = env.command
     print(f"情境 4 [原地右轉]: 目標=[ 0.00, -0.50] -> 實際 vx={info['vx']:+.4f} m/s, yaw={info['yaw_rate']:+.4f} rad/s, 高度={info['height']:.4f} m")
 
-    # 情境 5: 恢復煞車待命
+    # 情境 5: 恢復煞車待命 / Scenario 5: Return to braking stand-by
     env.command = np.array([0.0, 0.0, 0.0], dtype=np.float32)
     for _ in range(50):
         action, _ = model.predict(obs, deterministic=True)

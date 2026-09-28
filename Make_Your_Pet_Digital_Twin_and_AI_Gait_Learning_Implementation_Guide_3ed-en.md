@@ -101,20 +101,31 @@ Make Your Pet - Digital Twin/
 │   │   └── DEBUG/                              # Debug records, scripts & calibration notes
 │   │       └── test_kinematics_openloop.py     # Open-loop kinematics verification script
 │   │
-│   ├── tripod_kinematics.py           # Analytical tripod gait feedforward generator (Human Prior Engine)
-│   ├── hexapod_env.py                 # Gymnasium reinforcement learning environment wrapper
-│   ├── train.py                       # PPO multi-process vectorized parallel training main script
-│   ├── verify_command_tracking.py     # 5-scenario closed-loop command tracking benchmark
-│   ├── demo.py                        # Game-grade 3D real-time remote control workstation
-│   ├── export_onnx.py                 # PPO Actor → ONNX lightweight model exporter
-│   ├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
-│   ├── record_trajectory.py           # 50 FPS physics trajectory recorder (for Blender)
-│   ├── blender_cinematic.py           # Blender 5.2 automated cinematic render script
-│   ├── make_video.py                  # Trajectory frame renderer & video synthesizer
+│   ├── training1_walking/             # Locomotion gait training module (Tripod kinematics, PPO & ONNX)
+│   │   ├── hexapod_env.py             # Gymnasium reinforcement learning environment wrapper
+│   │   ├── tripod_kinematics.py       # Analytical tripod gait feedforward generator (Human Prior Engine)
+│   │   ├── train.py                   # PPO multi-process vectorized parallel training main script
+│   │   ├── verify_command_tracking.py # 5-scenario closed-loop command tracking benchmark
+│   │   ├── export_onnx.py             # PPO Actor → ONNX lightweight model exporter
+│   │   └── record_trajectory.py       # 50 FPS physics trajectory recorder (for Blender)
 │   │
+│   ├── training2_jumping/             # Standing jump residual RL module (FSM & dynamic damping)
+│   │   ├── hexapod_jump_env.py        # 78D observation jump Gym environment
+│   │   ├── jump_controller.py         # Multi-phase FSM jump controller
+│   │   ├── train_jump.py              # PPO jump training main script
+│   │   ├── test_jump_policy.py        # Open-loop vs closed-loop comparative benchmark
+│   │   └── test_jump.py               # Dynamics limits test script
+│   │
+│   ├── make_video/                    # Cinematic render scripts (Blender 5.2)
+│   │   ├── blender_cinematic.py       # Blender 5.2 automated cinematic render script
+│   │   └── make_video.py              # Trajectory frame renderer & video synthesizer
+│   │
+│   ├── demo.py                        # Game-grade 3D real-time remote control workstation
+│   ├── generate_hexapod_xml.py        # 18-DOF XML dynamic generator & parameter calibrator
+│   ├── command_manual.md              # Complete command line user manual
 │   ├── experiment_log.md              # Project experiment log & full milestone tracker
 │   ├── KnownIssue.md                  # Global known-issues quick reference
-│   ├── LICENSE                        # Apache 2.0 License
+│   ├── LICENSE                        # GPL-3.0 License
 │   └── hexapod_rl_env/                # Python virtual environment (created inside this folder)
 │
 ├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD

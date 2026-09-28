@@ -23,7 +23,7 @@
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/Framework-PyTorch%20%7C%20SB3-ee4c2c?style=flat-square&logo=pytorch" alt="PyTorch"></a>
   <a href="https://onnx.ai/"><img src="https://img.shields.io/badge/Edge%20AI-ONNX%20Runtime-005CED?style=flat-square&logo=onnx" alt="ONNX"></a>
   <a href="https://www.blender.org/"><img src="https://img.shields.io/badge/Render-Blender%205.2-E87D0D?style=flat-square&logo=blender" alt="Blender"></a>
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square" alt="License">
 </p>
 
 ---
@@ -242,6 +242,12 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 ```text
 Make Your Pet - Digital Twin/
 ├── MakeYourPet-DigitalTwin/           # Digital Twin core source code & trained models
+│   ├── training1_walking/             # Locomotion gait training (PPO, kinematics, ONNX)
+│   ├── training2_jumping/             # Standing jump residual RL (FSM, jumping controller)
+│   ├── make_video/                    # Blender 5.2 cinematic render scripts
+│   ├── models/                        # MuJoCo XML, textures & trained weights
+│   ├── demo.py                        # Game-grade 3D remote control workstation
+│   └── command_manual.md              # Complete command manual
 │
 ├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD
 │   └── hexapod-main/                  # Official MakeYourPet repository assets (STEP, STL, Chipo, etc.)
@@ -271,7 +277,7 @@ Make Your Pet - Digital Twin/
 
 ## License
 
-Project code and model configurations are open-sourced under the **MIT License**.  
+Project code and model configurations are open-sourced under the **GNU General Public License v3.0 (GPL-3.0)**.  
 3D models and geometric parts are copyright of the [MakeYourPet](https://github.com/MakeYourPet/hexapod) official open-source project.
 
 ---
@@ -304,7 +310,7 @@ Project code and model configurations are open-sourced under the **MIT License**
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/Framework-PyTorch%20%7C%20SB3-ee4c2c?style=flat-square&logo=pytorch" alt="PyTorch"></a>
   <a href="https://onnx.ai/"><img src="https://img.shields.io/badge/Edge%20AI-ONNX%20Runtime-005CED?style=flat-square&logo=onnx" alt="ONNX"></a>
   <a href="https://www.blender.org/"><img src="https://img.shields.io/badge/Render-Blender%205.2-E87D0D?style=flat-square&logo=blender" alt="Blender"></a>
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square" alt="License">
 </p>
 
 ---
@@ -523,6 +529,12 @@ python record_trajectory.py --frames 300 --output gait_trajectory.json
 ```text
 Make Your Pet - Digital Twin/
 ├── MakeYourPet-DigitalTwin/           # 數位孿生核心代碼庫與訓練權重
+│   ├── training1_walking/             # 行走步態訓練模組 (PPO, 三角運動學, ONNX 導出)
+│   ├── training2_jumping/             # 立定跳躍殘差強化學習模組 (FSM, 著地阻尼控制)
+│   ├── make_video/                    # Blender 5.2 影視級動畫合成腳本
+│   ├── models/                        # MuJoCo XML 模型、貼圖與訓練權重
+│   ├── demo.py                        # 3D 鍵盤電玩級即時遙控工作台
+│   └── command_manual.md              # 完整命令行操作手冊
 │
 ├── MakeYourPet-hexapod/               # 原廠 3D 列印 STL 與硬體 CAD 零件庫
 │   └── hexapod-main/                  # MakeYourPet 官方倉庫資源 (STEP, STL, Chipo 等)
@@ -552,5 +564,5 @@ Make Your Pet - Digital Twin/
 
 ## 授權條款 (License)
 
-本專案程式碼與模型配置採用 **MIT License** 授權開源。  
+本專案程式碼與模型配置採用 **GNU General Public License v3.0 (GPL-3.0)** 授權開源。  
 3D 模型與幾何零件版權歸屬於 [MakeYourPet](https://github.com/MakeYourPet/hexapod) 官方開源專案。

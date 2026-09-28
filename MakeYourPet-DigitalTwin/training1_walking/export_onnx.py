@@ -1,7 +1,7 @@
 import os
 import sys
 
-# 確保 Windows cp950 環境下能夠正確輸出 UTF-8 與表情符號 (避免 torch.onnx 印出 checkmark 報錯)
+# 確保 Windows cp950 環境下能夠正確輸出 UTF-8 與表情符號 (避免 torch.onnx 印出 checkmark 報錯) / Ensure proper UTF-8 and emoji output under Windows cp950 environment (prevents torch.onnx checkmark print error)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -15,7 +15,7 @@ import onnxruntime as ort
 from stable_baselines3 import PPO
 
 class HexapodActor(torch.nn.Module):
-    """提取 PPO 策略網路之 Actor 部分，供邊緣裝置與 Sim-to-Real 推論"""
+    """提取 PPO 策略網路之 Actor 部分，供邊緣裝置與 Sim-to-Real 推論 / Extract Actor network from PPO policy for edge devices and Sim-to-Real inference"""
     def __init__(self, policy):
         super().__init__()
         self.mlp_extractor = policy.mlp_extractor.policy_net
@@ -24,7 +24,7 @@ class HexapodActor(torch.nn.Module):
     def forward(self, obs):
         latent = self.mlp_extractor(obs)
         action = self.action_net(latent)
-        # 截斷在 [-1.0, 1.0]
+        # 截斷在 [-1.0, 1.0] / Clamp to [-1.0, 1.0]
         return torch.clamp(action, -1.0, 1.0)
 
 def parse_args():
@@ -74,13 +74,13 @@ def main():
         opset_version=17
     )
 
-    # 驗證 ONNX 模型完整性
+    # 驗證 ONNX 模型完整性 / Verify ONNX model integrity
     onnx_model = onnx.load(args.output)
     onnx.checker.check_model(onnx_model)
     file_size_kb = os.path.getsize(args.output) / 1024.0
     print(f"ONNX 模型驗證通過！檔案大小: {file_size_kb:.1f} KB")
 
-    # 執行 ONNX Runtime 實測
+    # 執行 ONNX Runtime 實測 / Run ONNX Runtime test inference
     session = ort.InferenceSession(args.output)
     ort_inputs = {session.get_inputs()[0].name: np.random.randn(1, 67).astype(np.float32)}
     ort_outs = session.run(None, ort_inputs)

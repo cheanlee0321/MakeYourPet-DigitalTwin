@@ -2,7 +2,7 @@
 ### Phased Milestone & Technical Report for Residual RL Jump Training
 
 > **專案儲存庫**：`Make Your Pet Digital Twin`  
-> **專屬模組**：`train_jumping/`  
+> **專屬模組**：`training2_jumping/`  
 > **更新日期**：2026-09-28  
 > **硬體環境**：Intel Core i7-14650HX (24 緒) / NVIDIA GeForce RTX 5070 Laptop GPU (Blackwell sm_120, CUDA 13.0) / 32GB DDR5  
 > **核心框架**：MuJoCo 3.14.0, Gymnasium 1.3.0, Stable-Baselines3 2.9.0, PyTorch 2.15.0.dev  
@@ -119,7 +119,7 @@ $$R_{\text{total}} = R_{\text{alive}} + R_{\text{orient}} + R_{\omega} + R_{\tex
 
 ## 5. 開環 vs 閉環性能基準對比評估
 
-使用 [`train_jumping/test_jump_policy.py`](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/train_jumping/test_jump_policy.py) 在具備機身質量擾動（$\pm 12\%$）與地表摩擦力變異（$\mu \in [0.75, 1.45]$）下的 5 回合嚴格對比：
+使用 [`training2_jumping/test_jump_policy.py`](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/training2_jumping/test_jump_policy.py) 在具備機身質量擾動（$\pm 12\%$）與地表摩擦力變異（$\mu \in [0.75, 1.45]$）下的 5 回合嚴格對比：
 
 ### 5.1 經典平地場景 (Flat Arena)
 | 性能評估項目 | 基準數字 5 開環 (FSM) | 數字 5 + 殘差 RL (智慧閉環) | 改善提升成果 |
@@ -140,10 +140,10 @@ $$R_{\text{total}} = R_{\text{alive}} + R_{\text{orient}} + R_{\omega} + R_{\tex
 
 ## 6. 模組架構與檔案清單
 
-所有與立定跳躍訓練、控制與驗證相關的程式碼均高內聚整合於 [`train_jumping/`](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/train_jumping/)：
+所有與立定跳躍訓練、控制與驗證相關的程式碼均高內聚整合於 [`training2_jumping/`](file:///c:/Users/chean/OneDrive/Desktop/Antigravity/Make%20Your%20Pet%20Digital%20Twin/training2_jumping/)：
 
 ```text
-train_jumping/
+training2_jumping/
 ├── __init__.py             # 導出 HexapodJumpEnv, JumpController, JumpState
 ├── hexapod_jump_env.py     # 78D 觀測、階段自適應縮放、5 大地貌的跳躍 Gym 環境
 ├── jump_controller.py      # 數字 5 行為多階段 FSM 控制器 (零滑移深蹲、爆發過載、動態感知)

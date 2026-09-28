@@ -916,13 +916,13 @@
 
 ---
 
-### 【實驗紀錄 025】階段 8：工程架構重構——模組化拆分 `train_walking/` 與 `train_jumping/`
+### 【實驗紀錄 025】階段 8：工程架構重構——模組化拆分 `training1_walking/` 與 `training2_jumping/`
 * **實驗日期**：2026-09-28
 * **重構目標**：
-  - 響應使用者「建立 `train_walking/` 與 `train_jumping/` 資料夾，分別歸納走路訓練與跳躍訓練檔案」之架構整理需求。
+  - 響應使用者「建立 `training1_walking/` 與 `training2_jumping/` 資料夾，分別歸納走路訓練與跳躍訓練檔案」之架構整理需求。
   - 將先前集中於根目錄的步態訓練、運動學生成器、跳躍殘差環境、FSM 控制器與評估腳本進行高內聚、低耦合模組化劃分。
 * **資料夾配置與歸檔清單**：
-  1. **`train_walking/`（行走步態訓練模組）**：
+  1. **`training1_walking/`（行走步態訓練模組）**：
      - `hexapod_env.py`：全自由度行走步態強化學習環境（67D 觀測、18D 動作、解析三角步態前饋耦合）。
      - `tripod_kinematics.py`：解析三角步態逆向運動學軌跡產生器。
      - `train.py`：PPO 步態訓練主程式（多進程並行、全自由度指令隨機採樣）。
@@ -930,7 +930,7 @@
      - `export_onnx.py`：步態策略 ONNX 導出工具。
      - `record_trajectory.py`：步態關節角度軌跡錄製工具。
      - `__init__.py`：暴露 `HexapodEnv` 與 `TripodKinematics`。
-  2. **`train_jumping/`（立定跳躍殘差訓練模組）**：
+  2. **`training2_jumping/`（立定跳躍殘差訓練模組）**：
      - `hexapod_jump_env.py`：立定跳躍專屬殘差環境（78D 觀測、階段自適應縮放、5 大地貌）。
      - `jump_controller.py`：多階段 FSM 立定跳躍控制器（爆發推力、著地動態阻尼感知）。
      - `train_jump.py`：PPO 跳躍殘差訓練主程式。
@@ -939,7 +939,7 @@
      - `verify_jump_env.py`：跳躍環境單元測試工具。
      - `__init__.py`：暴露 `HexapodJumpEnv`、`JumpController`、`JumpState`。
   3. **根目錄核心整合與公共資源保留**：
-     - `demo.py`：即時 3D 視覺化與遙控工作台（動態掛載 `train_walking` 與 `train_jumping`，無縫兼顧走跑轉向與智慧跳躍）。
+     - `demo.py`：即時 3D 視覺化與遙控工作台（動態掛載 `training1_walking` 與 `training2_jumping`，無縫兼顧走跑轉向與智慧跳躍）。
      - `models/`：共享 MuJoCo XML 模型、材質貼圖與神經網路權重。
      - `generate_hexapod_xml.py`：XML 動力學編譯腳本。
 * **路徑兼容性升級**：

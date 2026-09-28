@@ -21,7 +21,7 @@ except (ImportError, ValueError):
 
 def make_env(rank: int, seed: int = 0, domain_rand: bool = True, resample_cmd: bool = True,
              terrain_type: str = "flat", terrain_height: float = 0.015):
-    """建立包含獨立隨機種子與設定的環境工廠函數"""
+    """建立包含獨立隨機種子與設定的環境工廠函數 / Environment factory function creating environments with independent random seeds and configs"""
     def _init():
         env = HexapodEnv(
             domain_randomization=domain_rand,
@@ -69,7 +69,7 @@ def main():
     print(f"[配置] 學習率 / 熵係數: {args.lr} / {args.ent_coef}")
     print(f"[配置] 採樣緩衝區:      {args.num_envs} envs x {args.n_steps} steps = {args.num_envs * args.n_steps:,} 步/輪")
 
-    # 自動定位專案根目錄
+    # 自動定位專案根目錄 / Automatically locate project root directory
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if not os.path.exists(os.path.join(project_root, "models")):
         project_root = os.getcwd()
@@ -81,7 +81,7 @@ def main():
     os.makedirs(chkpt_dir, exist_ok=True)
     os.makedirs(best_model_dir, exist_ok=True)
 
-    # 1. 建立並行訓練環境
+    # 1. 建立並行訓練環境 / 1. Build parallel training environments
     print("\n[1/4] 正在啟動多進程物理模擬環境...")
     env = SubprocVecEnv([
         make_env(i, seed=42, domain_rand=use_domain_rand,
@@ -90,7 +90,7 @@ def main():
     ])
     env = VecMonitor(env)
 
-    # 2. 建立獨立評估環境 (確定性評估，關閉隨機外力)
+    # 2. 建立獨立評估環境 (確定性評估，關閉隨機外力) / 2. Build independent evaluation environment (deterministic evaluation, external disturbances off)
     eval_env = SubprocVecEnv([
         make_env(999, seed=1234, domain_rand=False,
                  terrain_type=args.terrain, terrain_height=args.terrain_height)
@@ -98,7 +98,7 @@ def main():
     ])
     eval_env = VecMonitor(eval_env)
 
-    # 3. 設置回調機制 (評估回調與定時儲存)
+    # 3. 設置回調機制 (評估回調與定時儲存) / 3. Set up callbacks (evaluation callback & periodic checkpointing)
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=best_model_dir,
@@ -118,7 +118,7 @@ def main():
 
     callbacks = CallbackList([eval_callback, checkpoint_callback])
 
-    # 4. 初始化或載入 PPO 模型
+    # 4. 初始化或載入 PPO 模型 / 4. Initialize or load PPO model
     print("[2/4] 初始化 PPO 神經網路策略架構...")
     policy_kwargs = dict(
         net_arch=dict(pi=[256, 256], vf=[256, 256]),
@@ -154,7 +154,7 @@ def main():
             tensorboard_log=log_dir
         )
 
-    # 5. 開始學習
+    # 5. 開始學習 / 5. Start learning
     print("\n[3/4] 啟動強化學習訓練迴圈！")
     print(f"      請開啟另一個終端機執行：tensorboard --logdir={log_dir}")
     print(f"      瀏覽器開啟 http://localhost:6006 即時查看訓練曲線與步態收斂回報。\n")
@@ -175,13 +175,13 @@ def main():
         print(f"[4/4] 訓練結束！總耗時: {elapsed:.2f} 秒 ({elapsed / 60.0:.2f} 分鐘)")
         print(f"      平均採樣速率: {sps:.1f} Steps/sec (SPS)")
 
-        # 儲存最終模型
+        # 儲存最終模型 / Save final model
         final_model_path = os.path.join(project_root, "models", "hexapod_final_policy")
         model.save(final_model_path)
         print(f"      最終模型權重已儲存至: {final_model_path}.zip")
         print(f"      最佳評估模型位於:     {os.path.join(best_model_dir, 'best_model.zip')}")
 
-        # 清理並釋放多進程資源
+        # 清理並釋放多進程資源 / Clean up and release multi-processing resources
         env.close()
         eval_env.close()
         print("=" * 70)

@@ -5,6 +5,12 @@ Jump Dynamics & Dual-Mode Super Jump Validator for Make Your Pet Hexapod
 2. 【Mode 2 - 70cm 火箭超跳 (Shift + 5)】: 力度 power=1.25，起跳高度約 68~72cm，騰空飛行約 0.6 秒
 3. 腹部安全淨空 (Battery Ground Clearance > 3.0cm，全程 0 次腹部接觸)
 4. 動態觸地感知 (Contact-Driven Landing，橡膠腳掌先接觸地面，即刻啟動吸震阻尼)
+
+Verify dual-mode super standing jump:
+1. [Mode 1 - 55cm Explosive High Jump (Key 5)]: Power=1.0, jump height ~50-55cm, flight time ~0.5s
+2. [Mode 2 - 70cm Rocket Super Jump (Shift + 5)]: Power=1.25, jump height ~68-72cm, flight time ~0.6s
+3. Belly safety ground clearance (Battery Ground Clearance > 3.0cm, 0 belly contacts throughout)
+4. Dynamic contact-driven landing (rubber foot tips contact ground first, immediately triggering shock-absorbing damping)
 """
 import sys
 if hasattr(sys.stdout, "reconfigure"):
@@ -56,7 +62,7 @@ def run_dual_jump_test():
         print(f">>> 測試 {mode_name} (power={power})")
         print("=" * 60)
 
-        # 重置機身位置
+        # 重置機身位置 / Reset trunk pose
         data.qpos[0:3] = [0.0, 0.0, 0.082]
         data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         data.qpos[7:] = 0.0
@@ -78,7 +84,7 @@ def run_dual_jump_test():
         flight_steps = 0
         touchdown_height = 0.0
 
-        for step in range(100): # 最多 2.0 秒充足吸震復原
+        for step in range(100): # 最多 2.0 秒充足吸震復原 / Up to 2.0s for sufficient shock absorption and recovery
             q_jump = jc.step(data=data)
             if q_jump is None:
                 break
@@ -103,7 +109,7 @@ def run_dual_jump_test():
             if z > max_trunk_z: max_trunk_z = z
             if vz > max_vz: max_vz = vz
 
-            # 檢測足端接觸
+            # 檢測足端接觸 / Detect foot tip contacts
             n_feet = sum(1 for c in range(data.ncon) if data.contact[c].geom1 in tip_ids or data.contact[c].geom2 in tip_ids)
             if n_feet == 0:
                 flight_steps += 1

@@ -1,7 +1,8 @@
 """
 Make Your Pet - 將 Blender 渲染幀序列自動合成為 MP4 高清影片
-=========================================================
-用法：
+                Automatically compile Blender rendered frame sequences into high-definition MP4 videos
+========================================================================================================
+用法 / Usage:
 python make_video.py [--fps 50] [--input renders] [--output hexapod_cinematic.mp4]
 """
 
