@@ -23,7 +23,7 @@
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/Framework-PyTorch%20%7C%20SB3-ee4c2c?style=flat-square&logo=pytorch" alt="PyTorch"></a>
   <a href="https://onnx.ai/"><img src="https://img.shields.io/badge/Edge%20AI-ONNX%20Runtime-005CED?style=flat-square&logo=onnx" alt="ONNX"></a>
   <a href="https://www.blender.org/"><img src="https://img.shields.io/badge/Render-Blender%205.2-E87D0D?style=flat-square&logo=blender" alt="Blender"></a>
-  <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
 </p>
 
 ---
@@ -268,7 +268,7 @@ Make Your Pet - Digital Twin/
 │   │
 │   ├── experiment_log.md              # Project experiment log & full milestone progress tracker
 │   ├── KnownIssue.md                  # Global known-issues quick reference
-│   └── LICENSE                        # Apache 2.0 License
+│   └── LICENSE                        # MIT License
 │
 ├── MakeYourPet-hexapod/               # Original 3D-printed STL files & hardware CAD
 │   └── hexapod-main/                  # Official MakeYourPet repository assets (STEP, STL, Chipo, etc.)
@@ -298,7 +298,7 @@ Make Your Pet - Digital Twin/
 
 ## License
 
-Project code and model configurations are open-sourced under the **Apache License 2.0**.  
+Project code and model configurations are open-sourced under the **MIT License**.  
 3D models and geometric parts are copyright of the [MakeYourPet](https://github.com/MakeYourPet/hexapod) official open-source project.
 
 ---
@@ -331,7 +331,7 @@ Project code and model configurations are open-sourced under the **Apache Licens
   <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/Framework-PyTorch%20%7C%20SB3-ee4c2c?style=flat-square&logo=pytorch" alt="PyTorch"></a>
   <a href="https://onnx.ai/"><img src="https://img.shields.io/badge/Edge%20AI-ONNX%20Runtime-005CED?style=flat-square&logo=onnx" alt="ONNX"></a>
   <a href="https://www.blender.org/"><img src="https://img.shields.io/badge/Render-Blender%205.2-E87D0D?style=flat-square&logo=blender" alt="Blender"></a>
-  <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
 </p>
 
 ---
@@ -576,7 +576,7 @@ Make Your Pet - Digital Twin/
 │   │
 │   ├── experiment_log.md              # 專案實驗日誌與全里程碑進度追蹤
 │   ├── KnownIssue.md                  # 全域已知問題速查手冊
-│   └── LICENSE                        # Apache 2.0 開源授權條款
+│   └── LICENSE                        # MIT 開源授權條款
 │
 ├── MakeYourPet-hexapod/               # 原廠 3D 列印 STL 與硬體 CAD 零件庫
 │   └── hexapod-main/                  # MakeYourPet 官方倉庫資源 (STEP, STL, Chipo 等)
@@ -606,5 +606,5 @@ Make Your Pet - Digital Twin/
 
 ## 授權條款 (License)
 
-本專案程式碼與模型配置採用 **Apache License 2.0** 授權開源。  
+本專案程式碼與模型配置採用 **MIT License** 授權開源。  
 3D 模型與幾何零件版權歸屬於 [MakeYourPet](https://github.com/MakeYourPet/hexapod) 官方開源專案。
