@@ -42,7 +42,7 @@ DEADMAN_TIMEOUT_SEC = 0.35        # Auto-brake if no command received for 350ms
 
 class ChicaTcpBridge:
     """Manages persistent connection and bidirectional data transfer with Phone B (ChicaServer TCP 18711)"""
-    def __init__(self, host: str, port: int, on_telemetry=None):
+    def __init__(self, host: str, port: int, on_telemetry=None, auto_connect: bool = True):
         self.host = host
         self.port = port
         self.on_telemetry = on_telemetry
@@ -60,24 +60,26 @@ class ChicaTcpBridge:
             "legs": "------",
             "flags": "000000000"
         }
-        self.thread = threading.Thread(target=self._connection_loop, daemon=True)
-        self.thread.start()
+        self.thread = None
+        if auto_connect:
+            self.thread = threading.Thread(target=self._connection_loop, daemon=True)
+            self.thread.start()
 
     def _connection_loop(self):
         while self.running:
             if not self.connected:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(2.0)
+                    s.settimeout(1.0)
                     s.connect((self.host, self.port))
-                    s.setblocking(False)
                     with self.lock:
                         self.sock = s
                         self.connected = True
                         self.latest_telemetry["robotConnected"] = True
+                        current_telem = dict(self.latest_telemetry)
                     print(f"[*] Successfully connected to ChicaServer [{self.host}:{self.port}]")
                     if self.on_telemetry:
-                        self.on_telemetry(self.latest_telemetry)
+                        self.on_telemetry(current_telem)
                 except Exception as e:
                     with self.lock:
                         self.sock = None
@@ -89,13 +91,18 @@ class ChicaTcpBridge:
             # Telemetry receive loop
             buf = ""
             while self.running and self.connected:
+                with self.lock:
+                    s = self.sock
+                if not s:
+                    break
                 try:
-                    r, _, _ = select.select([self.sock], [], [], 0.5)
+                    r, _, _ = select.select([s], [], [], 0.5)
                     if not r:
                         continue
-                    chunk = self.sock.recv(2048).decode('utf-8', errors='ignore')
+                    chunk = s.recv(2048).decode('utf-8', errors='ignore')
                     if not chunk:
-                        print("[-] ChicaServer connection closed")
+                        if self.running:
+                            print("[-] ChicaServer connection closed")
                         break
                     buf += chunk
                     while "\n" in buf:
@@ -104,7 +111,8 @@ class ChicaTcpBridge:
                         if line:
                             self._parse_line(line)
                 except Exception as e:
-                    print(f"[-] Read error: {e}")
+                    if self.running:
+                        print(f"[-] Read error: {e}")
                     break
 
             with self.lock:
@@ -116,8 +124,9 @@ class ChicaTcpBridge:
                     self.sock = None
                 self.connected = False
                 self.latest_telemetry["robotConnected"] = False
+                offline_telem = dict(self.latest_telemetry)
             if self.on_telemetry:
-                self.on_telemetry(self.latest_telemetry)
+                self.on_telemetry(offline_telem)
             time.sleep(1.0)
 
     def _parse_line(self, line: str):
@@ -125,7 +134,8 @@ class ChicaTcpBridge:
         if line.startswith("ready:") or line.startswith("busy:"):
             payload = line.split(":", 1)[1]
             parts = payload.split("|")
-            telem = self.latest_telemetry.copy()
+            with self.lock:
+                telem = self.latest_telemetry.copy()
             telem["robotConnected"] = True
 
             for p in parts:
@@ -153,9 +163,13 @@ class ChicaTcpBridge:
                 elif p.startswith("FLAGS="):
                     telem["flags"] = p[6:].strip()
 
-            self.latest_telemetry = telem
+            with self.lock:
+                self.latest_telemetry = telem
             if self.on_telemetry:
-                self.on_telemetry(telem)
+                try:
+                    self.on_telemetry(telem)
+                except Exception as e:
+                    print(f"[-] Telemetry callback error: {e}")
 
     def send(self, cmd: str):
         """Send text command to ChicaServer (automatically appends \\n)"""
@@ -179,17 +193,23 @@ class ChicaTcpBridge:
                     self.sock.close()
                 except Exception:
                     pass
+                self.sock = None
 
 class PilotServerManager:
     """Coordinates HTTP server, WebSocket service, and TCP bridge"""
-    def __init__(self, web_dir: str, http_port: int, ws_port: int, chica_host: str, chica_port: int, mock: bool = False):
+    def __init__(self, web_dir: str, http_port: int, ws_port: int, chica_host: str, chica_port: int, mock: bool = False, deadman_timeout: float = DEADMAN_TIMEOUT_SEC, start_mock_loop: bool = True):
         self.web_dir = web_dir
         self.http_port = http_port
         self.ws_port = ws_port
         self.chica_host = chica_host
         self.chica_port = chica_port
         self.mock = mock
+        self.deadman_timeout = deadman_timeout
 
+        self.running = True
+        self.httpd = None
+        self.http_thread = None
+        self.ws_server = None
         self.ws_clients = set()
         self.ws_loop = None
         self.last_move_time = time.time()
@@ -199,23 +219,27 @@ class PilotServerManager:
             self.bridge = ChicaTcpBridge(chica_host, chica_port, on_telemetry=self._on_telemetry_update)
         else:
             self.bridge = None
-            threading.Thread(target=self._mock_telemetry_loop, daemon=True).start()
+            if start_mock_loop:
+                threading.Thread(target=self._mock_telemetry_loop, daemon=True).start()
 
         # Start Deadman watchdog thread
         threading.Thread(target=self._deadman_watchdog, daemon=True).start()
 
     def _on_telemetry_update(self, telemetry_dict):
         """Broadcast received robot telemetry to all Phone A clients via WebSocket"""
-        if not self.ws_loop:
+        if not self.ws_loop or not self.running:
             return
         payload = json.dumps(telemetry_dict)
-        asyncio.run_coroutine_threadsafe(self._broadcast(payload), self.ws_loop)
+        try:
+            asyncio.run_coroutine_threadsafe(self._broadcast(payload), self.ws_loop)
+        except RuntimeError:
+            pass
 
     async def _broadcast(self, message: str):
         if not self.ws_clients:
             return
         to_remove = set()
-        for client in self.ws_clients:
+        for client in list(self.ws_clients):
             try:
                 await client.send(message)
             except Exception:
@@ -223,10 +247,10 @@ class PilotServerManager:
         self.ws_clients.difference_update(to_remove)
 
     def _deadman_watchdog(self):
-        """Automatically send walkclear if no control command received within DEADMAN_TIMEOUT_SEC and currently moving"""
-        while True:
-            time.sleep(0.05)
-            if self.is_moving and (time.time() - self.last_move_time > DEADMAN_TIMEOUT_SEC):
+        """Automatically send walkclear if no control command received within deadman_timeout and currently moving"""
+        while self.running:
+            time.sleep(0.02)
+            if self.is_moving and (time.time() - self.last_move_time > self.deadman_timeout):
                 print("[Warning - Deadman Watchdog] Joystick signal timed out, auto-braking (walkclear)")
                 self.is_moving = False
                 if self.bridge:
@@ -236,7 +260,7 @@ class PilotServerManager:
         """Mock mode: generates virtual voltage, current, and foot contact signals for offline frontend testing"""
         print("[*] Mock mode enabled, generating simulated Chica telemetry")
         step = 0
-        while True:
+        while self.running:
             time.sleep(0.04) # 25Hz
             step += 1
             # In stationary stance, all 6 feet firmly touch ground (xxxxxx); alternate tripod steps only when moving
@@ -268,7 +292,9 @@ class PilotServerManager:
 
         # Send latest state immediately
         if self.bridge:
-            await websocket.send(json.dumps(self.bridge.latest_telemetry))
+            with self.bridge.lock:
+                telem_to_send = dict(self.bridge.latest_telemetry)
+            await websocket.send(json.dumps(telem_to_send))
 
         try:
             async for raw in websocket:
@@ -285,21 +311,54 @@ class PilotServerManager:
 
     def _process_client_command(self, data: dict):
         """Parse control command from Phone A and forward to ChicaServer"""
+        if not isinstance(data, dict):
+            return
+
         cmd_type = data.get("type")
 
         if cmd_type == "walk":
-            mode = data.get("mode", "onnx")
-            forward = float(data.get("forward", 0.0))
-            turn = float(data.get("turn", 0.0))
-            crab = bool(data.get("crab", False))
+            mode = str(data.get("mode", "onnx")).lower()
+            try:
+                forward_val = data.get("forward", 0.0)
+                forward = float(forward_val) if forward_val is not None else 0.0
+                if math.isnan(forward) or math.isinf(forward):
+                    forward = 0.0
+            except (ValueError, TypeError):
+                forward = 0.0
+
+            try:
+                turn_val = data.get("turn", 0.0)
+                turn = float(turn_val) if turn_val is not None else 0.0
+                if math.isnan(turn) or math.isinf(turn):
+                    turn = 0.0
+            except (ValueError, TypeError):
+                turn = 0.0
+
+            try:
+                strafe_val = data.get("strafe", 0.0)
+                strafe = float(strafe_val) if strafe_val is not None else 0.0
+                if math.isnan(strafe) or math.isinf(strafe):
+                    strafe = 0.0
+            except (ValueError, TypeError):
+                strafe = 0.0
+
+            is_crab = bool(data.get("crab", False))
+
+            # Clamp forward, turn, and strafe to [-1.0, 1.0] safe bounds
+            forward = max(-1.0, min(1.0, forward))
+            turn = max(-1.0, min(1.0, turn))
+            strafe = max(-1.0, min(1.0, strafe))
+
+            # In Crab mode, Chica protocol expects strafe in parts[0]
+            horiz = strafe if is_crab else turn
 
             # Determine command string based on mode
-            # ONNX gait: walkonnx:turn,forward,0
-            # Classical tripod gait: walk2:turn,forward,0
+            # ONNX gait: walkonnx:horiz,forward,0
+            # Classical tripod gait: walk2:horiz,forward,0
             prefix = "walkonnx:" if mode == "onnx" else "walk2:"
-            cmd = f"{prefix}{turn:.3f},{forward:.3f},0"
+            cmd = f"{prefix}{horiz:.3f},{forward:.3f},0"
 
-            self.is_moving = (abs(forward) > 0.02 or abs(turn) > 0.02)
+            self.is_moving = (abs(forward) > 0.02 or abs(turn) > 0.02 or (is_crab and abs(strafe) > 0.02))
             self.last_move_time = time.time()
 
             if self.bridge:
@@ -311,10 +370,18 @@ class PilotServerManager:
             if self.bridge:
                 self.bridge.send("walkclear")
 
+        elif cmd_type == "estop":
+            self.is_moving = False
+            self.last_move_time = time.time()
+            if self.bridge:
+                self.bridge.send("walkclear")
+                self.bridge.send("estop")
+
         elif cmd_type == "cmd":
-            raw_cmd = data.get("command", "")
-            if raw_cmd and self.bridge:
-                self.bridge.send(raw_cmd)
+            raw_cmd = str(data.get("command", "") or "")
+            cleaned_cmd = raw_cmd.strip().replace("\r", "").replace("\n", "")
+            if cleaned_cmd and self.bridge:
+                self.bridge.send(cleaned_cmd)
 
     def start_http_server(self):
         """Start static web server (Thread)"""
@@ -327,16 +394,56 @@ class PilotServerManager:
             def log_message(self, format, *args):
                 pass  # Silence HTTP request logs to keep terminal output clean
 
-        httpd = ThreadingHTTPServer(("0.0.0.0", self.http_port), StaticHandler)
+        self.httpd = ThreadingHTTPServer(("0.0.0.0", self.http_port), StaticHandler)
+        if self.http_port == 0:
+            self.http_port = self.httpd.server_address[1]
         print(f"[*] Web teleop dashboard started: http://0.0.0.0:{self.http_port} (Local: http://localhost:{self.http_port})")
-        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.http_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.http_thread.start()
+
+    def stop_http_server(self):
+        """Stop static web server"""
+        if self.httpd:
+            try:
+                self.httpd.shutdown()
+                self.httpd.server_close()
+            except Exception:
+                pass
+            self.httpd = None
 
     async def run_ws_server(self):
         """Start WebSocket server (Asyncio)"""
         self.ws_loop = asyncio.get_running_loop()
+        self.stop_event = asyncio.Event()
         print(f"[*] WebSocket control service listening on: ws://0.0.0.0:{self.ws_port}")
-        async with ws_serve(self.handle_ws_client, "0.0.0.0", self.ws_port):
-            await asyncio.Future()  # Keep running indefinitely
+        self.ws_server = await ws_serve(self.handle_ws_client, "0.0.0.0", self.ws_port)
+        if self.ws_port == 0 and hasattr(self.ws_server, "sockets") and self.ws_server.sockets:
+            self.ws_port = self.ws_server.sockets[0].getsockname()[1]
+        try:
+            await self.stop_event.wait()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.ws_server.close()
+            await self.ws_server.wait_closed()
+
+    def stop(self):
+        """Stop all services cleanly"""
+        self.running = False
+        self.stop_http_server()
+        if self.bridge:
+            self.bridge.close()
+        if self.ws_loop:
+            if hasattr(self, "stop_event") and self.stop_event:
+                try:
+                    self.ws_loop.call_soon_threadsafe(self.stop_event.set)
+                except Exception:
+                    pass
+            elif self.ws_server:
+                try:
+                    self.ws_loop.call_soon_threadsafe(self.ws_server.close)
+                except Exception:
+                    pass
 
 def get_local_ip():
     """Get local LAN IP address"""
@@ -387,8 +494,7 @@ def main():
         asyncio.run(manager.run_ws_server())
     except KeyboardInterrupt:
         print("\n[*] Shutting down relay server...")
-        if manager.bridge:
-            manager.bridge.close()
+        manager.stop()
 
 if __name__ == "__main__":
     main()

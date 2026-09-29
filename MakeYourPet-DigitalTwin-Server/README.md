@@ -109,17 +109,57 @@ During code review and full-loop integration testing, several critical bugs and 
 
 ---
 
-## 4. Verification & Testing
+---
 
-To run the automated full-loop simulation test:
+## 4. Verification & Regression Testing (完整回歸驗證測試體系)
 
+為了確保通訊協議、安全性機制 (Deadman Switch)、幾何逆向與 AI 步態推論 (ONNX)、Web 前端合約以及全鏈路閉環在程式碼迭代中皆具備零回歸風險，本模組建立了三層式完整自動化測試體系：
+
+```text
+MakeYourPet-DigitalTwin-Server/
+├── tests/                                 # [層級 1 & 2] 單元與整合測試套件
+│   ├── test_protocol_parser.py           # Chica TCP 狀態封包解析、異常容錯與 TCP 分包 (Framing) 測試
+│   ├── test_command_processor.py         # 手機 A WebSocket 控制指令校驗、邊界值截斷與防注入測試
+│   ├── test_deadman_watchdog.py          # 安全看門狗 (Deadman Switch) 雙重超時自動急停 (walkclear) 測試
+│   ├── test_mock_telemetry.py            # Mock 模式步態交替 (x-x-x-)、六足著地 (xxxxxx) 與負載電流模擬
+│   ├── test_kinematics_and_onnx.py       # ONNX 模型維度 (67->18)、推論數值穩定性、對稱性與硬體脈寬限制 [700, 2300]us
+│   ├── test_web_assets_and_http.py       # 靜態資源完整性、HTML-JS DOM ID 合約測試、HTTP 200/404 服務測試
+│   └── test_network_and_websocket.py     # 多客戶端廣播、突發斷線重連與 TCP Bridge 斷網自動復原測試
+└── tools/
+    ├── test_full_loop_simulation.py      # [層級 3] 8 階段全鏈路虛擬閉環模擬測試 (動態端口、全步態覆蓋)
+    └── run_regression_tests.py           # [主控入口] 整合回歸測試 Harness (支援 --all / --unit / --full-loop)
+```
+
+### 4.1 執行回歸測試 (CLI Instructions)
+
+#### 1. 執行完整回歸測試 (Unit + Integration + Full-Loop Simulation, 41 項測試):
 ```bash
-# From workspace root
+python MakeYourPet-DigitalTwin-Server/tools/run_regression_tests.py --all
+```
+
+#### 2. 快速單元與安全不變量測試 (僅需 ~2 秒，適合提交前快速驗證):
+```bash
+python MakeYourPet-DigitalTwin-Server/tools/run_regression_tests.py --unit
+```
+
+#### 3. 執行 Python 標準 `unittest` Discovery (CI/CD 相容):
+```bash
+python -m unittest discover -s MakeYourPet-DigitalTwin-Server/tests
+```
+
+#### 4. 執行 8 階段全鏈路虛擬閉環模擬測試:
+```bash
 python MakeYourPet-DigitalTwin-Server/tools/test_full_loop_simulation.py
 ```
 
-Expected output:
-* PilotServer WebSocket and TCP 18713 communication online.
-* Dual-joystick motion commands driving ONNX inference steps.
-* Deadman switch triggering safe stop and torque verification.
-* 18-channel virtual Servo2040 pulses verified 100% within the nominal standing range ($1373\ \mu s \sim 1627\ \mu s$).
+### 4.2 測試階段涵蓋範圍 (Full-Loop Simulation Phases)
+
+1. **Phase 1: WebSocket 握手與遙測連結校驗** (`robotConnected: true`, 電壓、電流與 BPS)。
+2. **Phase 2: 電源繼電器與姿態切換測試** (`torque` 繼電器通電, `sit` / `stand` 姿態切換)。
+3. **Phase 3: 前進方向 ONNX 步態推論** ($v_x > 0$, 殘差融合 $q = q_{\text{ref}} + 0.15\Delta q$, 實時負載電流提升至 $>1.5\text{A}$)。
+4. **Phase 4: 原地偏航旋轉測試** ($\omega_z > 0$, 左右兩側腿呈相反相位擺動)。
+5. **Phase 5: 後退方向步態推論** ($v_x < 0$)。
+6. **Phase 6: 經典三角步態模式動態切換** (`walk2:` 指令轉發相容性)。
+7. **Phase 7: 安全看門狗 (Deadman Switch) 超時急停測試** (中斷搖桿串流 $>350\text{ms}$，系統自動觸發 `walkclear` 剎車)。
+8. **Phase 8: 主動急停與待機電流復原校驗** (確認電流回落至待機安全值，18 通道虛擬 Servo2040 PWM 脈寬 100% 位於 $[700, 2300]\ \mu s$ 安全包絡內)。
+

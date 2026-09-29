@@ -201,7 +201,7 @@ public final class OnnxLocomotionRunner implements AutoCloseable {
         if (dt <= 0.0f) dt = DEFAULT_DT;
 
         // 1. Advance gait clock
-        boolean isMoving = Math.abs(vx) > 0.02f || Math.abs(yawRate) > 0.05f;
+        boolean isMoving = Math.abs(vx) > 0.02f || Math.abs(vy) > 0.02f || Math.abs(yawRate) > 0.05f;
         if (isMoving) {
             gaitPhase = (gaitPhase + 2.0 * Math.PI * STEP_FREQUENCY * dt) % (2.0 * Math.PI);
         } else {

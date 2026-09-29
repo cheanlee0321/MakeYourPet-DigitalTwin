@@ -617,6 +617,14 @@ public final class ChicaController implements AutoCloseable {
             applyOriginalMode(3);
         } else if (command.startsWith("quad")) {
             applyOriginalMode(4, parseQuadDisabledLegs(command));
+        } else if (command.startsWith("estop")) {
+            requestOriginalWalkStop(false);
+            relayStatus = false;
+            servoBackend.setRelay(false);
+        } else if (command.startsWith("clearance")) {
+            if (onnxLocomotionRunner != null) {
+                onnxLocomotionRunner.setHighClearance(!command.contains("off"));
+            }
         } else if (command.startsWith("walkclear")) {
             requestOriginalWalkStop(true);
         } else if (command.startsWith("walk")) {

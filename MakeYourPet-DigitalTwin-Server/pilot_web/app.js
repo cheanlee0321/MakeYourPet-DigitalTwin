@@ -230,6 +230,9 @@
         } else {
             dom.valCurrent.textContent = '--.-';
             dom.barCurrent.style.width = '0%';
+            dom.currZone.className = 'zone-badge zone-ok';
+            dom.currZone.textContent = 'STANDBY';
+            dom.currWarnText.textContent = 'NORMAL';
         }
 
         // 3. Hexapod ground contact monitoring (LEGS)
@@ -253,10 +256,13 @@
         // 4. BPS refresh
         dom.bpsTag.textContent = `${t.bps} BPS`;
 
-        // 5. FLAGS status sync (Relay and Stand)
+        // 5. FLAGS status sync (Relay, Stand, and Crab)
         if (t.flags && t.flags.length >= 2) {
             state.isTorqueOn = t.flags.charAt(0) === '1';
             state.isStanding = t.flags.charAt(1) === '1';
+            if (t.flags.length >= 4) {
+                state.crabMode = t.flags.charAt(3) === '1';
+            }
             updateButtonStates();
         }
     }
@@ -276,6 +282,11 @@
         } else {
             dom.btnStand.classList.remove('standing');
             dom.standText.textContent = 'SIT';
+        }
+
+        if (dom.btnCrab && dom.crabText) {
+            dom.btnCrab.classList.toggle('active', state.crabMode);
+            dom.crabText.textContent = state.crabMode ? 'ON' : 'OFF';
         }
     }
 
@@ -478,7 +489,8 @@
 
     // --- Deadman Switch Logic & Control Transmission Loop (25Hz) ---
     function checkMotionState() {
-        const isMoving = Math.abs(state.leftJoy.x) > 0.05 ||
+        const lateralActive = state.crabMode && Math.abs(state.leftJoy.x) > 0.05;
+        const isMoving = lateralActive ||
                          Math.abs(state.leftJoy.y) > 0.05 ||
                          Math.abs(state.rightJoy.x) > 0.05;
 
@@ -512,7 +524,7 @@
             };
 
             sendWs(cmdPayload);
-            dom.cmdStream.textContent = `WALK [F:${cmdPayload.forward} T:${cmdPayload.turn}]`;
+            dom.cmdStream.textContent = `WALK [F:${cmdPayload.forward} T:${cmdPayload.turn}${state.crabMode ? ' S:' + cmdPayload.strafe : ''}]`;
         } else if (!state.lastSentStop) {
             // Deadman Switch triggered (hands released): Send brake stop command
             sendWs({ type: 'stop' });
@@ -552,12 +564,20 @@
 
     // Emergency Stop (E-Stop)
     dom.btnEstop.addEventListener('click', () => {
-        // Send twice to ensure power cutoff
+        // Send stop and estop commands
         sendWs({ type: 'stop' });
-        sendWs({ type: 'cmd', command: 'torque' });
+        sendWs({ type: 'estop' });
+        sendWs({ type: 'cmd', command: 'estop' });
+        // Only toggle torque if relay was active to prevent turning relay on
+        if (state.isTorqueOn) {
+            sendWs({ type: 'cmd', command: 'torque' });
+        }
         joyLeft.reset();
         joyRight.reset();
-        alert('🛑 Emergency Stop (E-STOP) triggered! Power relay cut off.');
+        state.isMoving = false;
+        dom.cmdStream.textContent = 'E-STOP (HALT)';
+        dom.deadmanBadge.className = 'deadman-badge brake';
+        dom.deadmanText.textContent = 'E-STOP HALT';
     });
 
     // Crab mode
