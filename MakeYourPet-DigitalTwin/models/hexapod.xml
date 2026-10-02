@@ -9,17 +9,17 @@
   <!-- 視覺與網格資源載入 -->
   <asset>
     <!-- 3D 列印 STL 網格 (單位 mm -> m 縮放 0.001) -->
-    <mesh name="mesh_frame" file="../MakeYourPet-hexapod/hexapod-main/STL/frame.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_top_cover" file="../MakeYourPet-hexapod/hexapod-main/STL/top-cover.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_left_coxa" file="../MakeYourPet-hexapod/hexapod-main/STL/left-coxa.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_left_femur" file="../MakeYourPet-hexapod/hexapod-main/STL/left-femur.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_left_tibia" file="../MakeYourPet-hexapod/hexapod-main/STL/left-tibia.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_right_coxa" file="../MakeYourPet-hexapod/hexapod-main/STL/right-coxa.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_right_femur" file="../MakeYourPet-hexapod/hexapod-main/STL/right-femur.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_right_tibia" file="../MakeYourPet-hexapod/hexapod-main/STL/right-tibia.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_right_shield" file="../MakeYourPet-hexapod/hexapod-main/STL/shield.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="mesh_left_shield"  file="../MakeYourPet-hexapod/hexapod-main/STL/shield.stl" scale="0.001 -0.001 0.001"/>
-    <mesh name="mesh_tip" file="../MakeYourPet-hexapod/hexapod-main/STL/tip.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_frame" file="../../MakeYourPet-hexapod/hexapod-main/STL/frame.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_top_cover" file="../../MakeYourPet-hexapod/hexapod-main/STL/top-cover.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_left_coxa" file="../../MakeYourPet-hexapod/hexapod-main/STL/left-coxa.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_left_femur" file="../../MakeYourPet-hexapod/hexapod-main/STL/left-femur.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_left_tibia" file="../../MakeYourPet-hexapod/hexapod-main/STL/left-tibia.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_right_coxa" file="../../MakeYourPet-hexapod/hexapod-main/STL/right-coxa.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_right_femur" file="../../MakeYourPet-hexapod/hexapod-main/STL/right-femur.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_right_tibia" file="../../MakeYourPet-hexapod/hexapod-main/STL/right-tibia.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_right_shield" file="../../MakeYourPet-hexapod/hexapod-main/STL/shield.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="mesh_left_shield"  file="../../MakeYourPet-hexapod/hexapod-main/STL/shield.stl" scale="0.001 -0.001 0.001"/>
+    <mesh name="mesh_tip" file="../../MakeYourPet-hexapod/hexapod-main/STL/tip.stl" scale="0.001 0.001 0.001"/>
 
     <!-- 外觀材質配色 -->
     <material name="mat_frame" rgba="0.18 0.20 0.24 1.0" specular="0.5" shininess="0.3"/>
