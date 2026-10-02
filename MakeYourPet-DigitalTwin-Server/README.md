@@ -1,165 +1,212 @@
-# Make Your Pet Hexapod - Dual-Phone AI Locomotion System
+# 📱 Make Your Pet Hexapod: 雙手機遙控與步態切換操作手冊
+## Dual-Phone Teleoperation & Locomotion Mode Operations Manual
 
-> [!WARNING]
-> **Experimental Project & Upstream Notice / 專案聲明與實測提醒**:
-> - This server implementation is built upon [eternalnitrous/chica-server](https://github.com/eternalnitrous/chica-server).
-> - **Hardware Status**: This system has undergone virtual closed-loop simulation and software emulation, but **has not yet been validated on physical hardware** (尚未通過實體測試).
-> 
-> 本伺服器系統架構是基於 [eternalnitrous/chica-server](https://github.com/eternalnitrous/chica-server) 進行建構與二次開發。目前已完成全鏈路虛擬閉環模擬測試，**尚未通過實體硬體測試**，實機部署時請注意安全防護與限流保護。
-
-This repository hosts the **Dual-Phone AI Locomotion & Digital Twin Architecture** for the Make Your Pet Hexapod robot. It bridges edge reinforcement learning (PPO policy via ONNX Runtime Mobile) with real-time web telemetry and virtual hardware emulation.
+> **專案儲存庫 (Repository)**: `Make Your Pet Digital Twin`  
+> **適用模組 (Applicable Modules)**: `chica-server-main` (Android App) / `MakeYourPet-DigitalTwin-Server` (Pilot Web HUD) / `MakeYourPet-DigitalTwin` (MuJoCo Twin)  
+> **語言 (Languages)**: 繁體中文 (Traditional Chinese) / English  
+> **更新日期 (Date)**: 2026-10-02  
 
 ---
 
-## 1. System Architecture Overview
+## 📑 目錄 / Table of Contents
 
-The system operates across three primary nodes:
-
-```
-[ Phone A: Operator Remote ] 
-       │ (Touch Joysticks, HUD Telemetry)
-       ▼ WebSocket (Port 8081) / HTTP (Port 8080)
-[ PilotServer Relay (PC / Edge Gateway) ]
-       │ TCP Commands (Port 18711) & Telemetry Stream
-       ▼
-[ Phone B: Robot Brain (chica-server-main) ]
-       │ • 67-dim Observation Builder (IMU + Kinematics + Clocks)
-       │ • ONNX Runtime Mobile (hexapod_policy.onnx)
-       │ • 18-dim Residual Gait Fusion (q = q_ref + 0.15 * delta_q)
-       │ • Zero-Allocation 50 Hz PWM Pulse Converter
-       ▼ Binary 0xD3 / 0xC7 Packets (115200 baud USB Serial)
-[ Pimoroni Servo 2040 Board / Virtual Emulator ]
-       │ 18-channel PWM Pulses & ADC Sensors (Voltage, Current, Foot Contacts)
-```
+1. [系統架構概覽 / System Architecture Overview](#1-系統架構概覽--system-architecture-overview)
+2. [手機 B：機載伺服器畫面詳解 / Phone B: Onboard Server Screen Breakdown](#2-手機-b機載伺服器畫面詳解--phone-b-onboard-server-screen-breakdown)
+3. [手機 A：戰術 Web 遙控 HUD 畫面詳解 / Phone A: Tactical Web Pilot HUD Breakdown](#3-手機-a戰術-web-遙控-hud-畫面詳解--phone-a-tactical-web-pilot-hud-breakdown)
+4. [步態模式與切換指南 / Locomotion Modes & Switching Guide](#4-步態模式與切換指南--locomotion-modes--switching-guide)
+5. [無實體機虛擬閉環驗證指南 / Hardware-Free Simulation & Verification Guide](#5-無實體機虛擬閉環驗證指南--hardware-free-simulation--verification-guide)
+6. [常見問題與避坑手冊 / FAQ & Troubleshooting](#6-常見問題與避坑手冊--faq--troubleshooting)
 
 ---
 
-## 2. Key Features Implemented So Far
+## 1. 系統架構概覽 / System Architecture Overview
 
-### Feature 1: Embedded ONNX Locomotion Engine (`chica-server-main`)
-* **ONNX Runtime Mobile Integration**: Integrated `com.microsoft.onnxruntime:onnxruntime-android:1.17.1` into the Android Chica server.
-* **Self-Contained Model Packaging**: Embedded `hexapod_policy.onnx` (single 352 KB binary with embedded weights) directly into the APK assets.
-* **67-Dimensional Observation Vector**: Real-time state assembling matching the MuJoCo `hexapod_env.py` specification:
-  * Body orientation (Roll, Pitch) & angular velocities $(\omega_x, \omega_y, \omega_z)$
-  * Body linear velocities $(v_x, v_y, v_z)$
-  * 18 joint tracking errors $(q_{\text{current}} - q_{\text{ref}})$
-  * 18 scaled joint angular velocities $(\dot{q} \times 0.1)$
-  * 18 previous residual actions
-  * 3 commanded velocities $(v_x, v_y, \omega_{\text{yaw}})$
-  * 2 gait phase clock signals $(\sin\phi, \cos\phi)$
-* **18-DOF Residual Gait Fusion**: Fuses analytical tripod kinematics with neural network residual offsets ($q = q_{\text{ref}} + 0.15 \cdot \Delta q$), applying joint limits (Coxa $\pm 45^\circ$, Femur $\pm 45^\circ$, Tibia $\pm 60^\circ$) and exponential moving average (EMA) smoothing.
-* **Protocol Interception**: Added native support for `walkonnx:`, `walkai:`, and `onnx` toggle commands while maintaining full backward compatibility with original Chica text commands (`walk2:`, `torque`, `sit`, `stand`).
+```mermaid
+flowchart LR
+    subgraph Controller ["手機 A: 操作遙控端 (Phone A: Controller)"]
+        WebHUD["Web 戰術駕駛艙 (pilot_web)<br/>HTML5 雙虛擬搖桿 + HUD 遙測"]
+    end
 
-### Feature 2: Tactical Web Controller & Telemetry HUD (`pilot_web/`)
-* **Dual Virtual Joysticks**: Real-time analog touch controls (Left: Forward/Strafe, Right: Yaw rotation) with customizable deadzones and return-to-center springs.
-* **Hardware Deadman Switch**: Releasing the joysticks automatically transmits `walkclear` within 50 ms, stopping the robot immediately if the operator lets go.
-* **Live Status HUD**: Real-time indicators for battery voltage (V), current draw (A), communication rate (BPS), torque relay state, and an interactive 6-foot contact matrix visualizing tripod alternation.
-* **Asynchronous Pilot Relay Server (`pilot_server.py`)**: Built on Python `asyncio` + `websockets` + HTTP static serving, featuring a 350 ms safety watchdog that cuts motor commands upon connection loss.
+    subgraph Relay ["中繼伺服器 (PilotServer Relay)"]
+        PyRelay["pilot_server.py<br/>WebSocket (8081) / HTTP (8080)<br/>350ms Deadman 看門狗"]
+    end
 
-### Feature 3: Full-Loop Virtual Closed-Loop Simulator (`test_full_loop_simulation.py`)
-* **Hardware-Free End-to-End Testing**: Validates the entire pipeline (`Phone A Web HUD -> PilotServer -> Chica ONNX Brain -> Virtual Servo2040 Board`) on a standard PC without requiring a physical robot.
-* **Protocol Emulation**: Integrates the official `Servo2040ProtocolEmulator` to process 39-byte `0xD3` (SET PWM) packets and simulate `0xC7` (GET analog telemetry) responses with realistic dynamic load currents.
+    subgraph Robot ["手機 B: 機器人大腦 (Phone B: Robot Brain)"]
+        ServerApp["chica-server APK<br/>TCP Port 18711 服務"]
+        ONNXEngine["ONNX Runtime Mobile<br/>hexapod_policy.onnx<br/>67-維觀測 ➔ 18-維殘差動作"]
+        Kinematics["幾何逆運動學 (Tripod IK)"]
+    end
 
----
+    subgraph Hardware ["執行機構 (Hardware / Emulator)"]
+        ServoBoard["Pimoroni Servo 2040<br/>或 虛擬閉環模擬器"]
+    end
 
-## 3. Issues Encountered & Solutions Applied
-
-During code review and full-loop integration testing, several critical bugs and architectural challenges were identified and resolved:
-
-### 1. Coordinate Frame & Mechanical Attach Angle Mismatch (Critical Bug)
-* **The Problem**:  
-  The initial pulse conversion code ported the legacy formula from Chica's C++ APK (`corrected -= femurAttach`, `corrected += tibiaAttach`). In the original APK, the inverse kinematics computed *global trigonometric angles* relative to the horizontal plane (Femur $\approx 46^\circ$, Tibia $\approx 61^\circ$).  
-  However, in MuJoCo, the CAD parts are *already modeled with their attach angles* (Femur $35^\circ$, Tibia $68^\circ$), meaning $\theta = 0.0\text{ rad}$ represents the **nominal standing pose**.  
-  Applying the legacy formula to relative angles shifted Femur to $1888\ \mu s$ / $1112\ \mu s$ and Tibia to $745\ \mu s$ / $2255\ \mu s$ (hitting physical servo stops and causing severe joint dislocation). Additionally, Left Coxa angles swung backwards while Right Coxa swung forwards, causing the robot to spin in circles instead of walking straight.
-* **The Solution**:  
-  Re-anchored the pulse generator around `DEFAULT_STAND_PULSES`:
-  * **Coxa (Yaw)**: $\text{pulse} = \text{center} - \theta_{\text{deg}} \times 11.111$ (automatically accounts for symmetric forward swing across both sides).
-  * **Femur & Tibia (Pitch)**: $\text{pulse} = \text{center} + (\text{isRight} ? -1.0 : 1.0) \times \theta_{\text{deg}} \times 11.111$ (compensates for mirrored physical servo mounting).  
-  At $\theta = 0.0\text{ rad}$, all 18 servos now sit precisely at their calibrated neutral standing pulses ($1500\ \mu s$ safe zone).
-
-### 2. Custom Pin Mapping & Calibration Overrides
-* **The Problem**:  
-  `JOINT_TO_PIN_MAP` was hardcoded, causing custom pin remappings in `config-2040.txt` (e.g., swapping a damaged pin channel) to be silently ignored during ONNX locomotion.
-* **The Solution**:  
-  Updated `OnnxLocomotionRunner` to dynamically check `servoCalibration.pin[leg][joint]` and user-calibrated center pulse ranges before falling back to default pin indices.
-
-### 3. High-Frequency Garbage Collection Jitter (50 Hz ART GC Pressure)
-* **The Problem**:  
-  Calling `FloatBuffer.wrap()`, allocating new `float[]` arrays, and generating `Map` entries on every 20 ms cycle created significant memory churn. On mobile Android devices, frequent ART garbage collection pauses caused timing jitter and frame drops in the real-time loop.
-* **The Solution**:  
-  Introduced a **Zero-Allocation pipeline**: pre-allocated direct native `FloatBuffer` (`ByteBuffer.allocateDirect`), reusable observation/residual buffers, and in-place tensor rewinds, eliminating heap allocations during 50 Hz execution.
-
-### 4. Abrupt Joint Jerk upon Stop Commands
-* **The Problem**:  
-  When receiving `walkclear` or when joystick inputs returned to zero, the gait phase and target angles were instantly zeroed, causing swinging legs to snap back to the standing pose in a single tick.
-* **The Solution**:  
-  Implemented soft deceleration decay: when `isMoving == false`, residual offsets decay by $0.85\times$ per tick and the EMA smoothing filter uses $\beta = 0.4$, smoothly setting the feet onto the ground within 150 ms.
-
-### 5. Standalone ONNX Model Packaging
-* **The Problem**:  
-  The initial ONNX export used external weight files (`hexapod_policy.onnx.data`), which caused `context.getAssets().open()` in Android to throw `OrtException` because sub-asset file paths could not be resolved.
-* **The Solution**:  
-  Re-serialized the policy using ONNX's embedded weight format into a standalone single-file `hexapod_policy.onnx` (352 KB).
-
-### 6. Static Foot Contact Indicator Blinking
-* **The Problem**:  
-  The virtual emulator alternated simulated foot contact touches even when the robot was standing still, causing the HUD leg contact indicators to blink continuously.
-* **The Solution**:  
-  Gated tripod phase alternation on `is_moving`; when stationary, all six feet report solid $3.3\text{ V}$ contact telemetry.
-
----
-
----
-
-## 4. Verification & Regression Testing (完整回歸驗證測試體系)
-
-為了確保通訊協議、安全性機制 (Deadman Switch)、幾何逆向與 AI 步態推論 (ONNX)、Web 前端合約以及全鏈路閉環在程式碼迭代中皆具備零回歸風險，本模組建立了三層式完整自動化測試體系：
-
-```text
-MakeYourPet-DigitalTwin-Server/
-├── tests/                                 # [層級 1 & 2] 單元與整合測試套件
-│   ├── test_protocol_parser.py           # Chica TCP 狀態封包解析、異常容錯與 TCP 分包 (Framing) 測試
-│   ├── test_command_processor.py         # 手機 A WebSocket 控制指令校驗、邊界值截斷與防注入測試
-│   ├── test_deadman_watchdog.py          # 安全看門狗 (Deadman Switch) 雙重超時自動急停 (walkclear) 測試
-│   ├── test_mock_telemetry.py            # Mock 模式步態交替 (x-x-x-)、六足著地 (xxxxxx) 與負載電流模擬
-│   ├── test_kinematics_and_onnx.py       # ONNX 模型維度 (67->18)、推論數值穩定性、對稱性與硬體脈寬限制 [700, 2300]us
-│   ├── test_web_assets_and_http.py       # 靜態資源完整性、HTML-JS DOM ID 合約測試、HTTP 200/404 服務測試
-│   └── test_network_and_websocket.py     # 多客戶端廣播、突發斷線重連與 TCP Bridge 斷網自動復原測試
-└── tools/
-    ├── test_full_loop_simulation.py      # [層級 3] 8 階段全鏈路虛擬閉環模擬測試 (動態端口、全步態覆蓋)
-    └── run_regression_tests.py           # [主控入口] 整合回歸測試 Harness (支援 --all / --unit / --full-loop)
+    WebHUD <-->|WebSocket 25Hz| PyRelay
+    PyRelay <-->|TCP 18711| ServerApp
+    ServerApp --> ONNXEngine
+    ServerApp --> Kinematics
+    ServerApp <-->|USB 序列埠 0xD3/0xC7| ServoBoard
 ```
 
-### 4.1 執行回歸測試 (CLI Instructions)
+### 【繁體中文】架構說明
+- **手機 A (Phone A - 遙控駕駛艙)**：操作者持有的手機或電腦瀏覽器，開啟橫向戰術 HUD 介面，提供虛擬觸控雙搖桿與即時電氣/步態狀態回饋。
+- **中繼伺服器 (Pilot Relay Server)**：運行於 PC 或邊緣網關，負責靜態網頁託管、WebSocket 控制訊號中繼與 350 ms 安全看門狗斷線防護。
+- **手機 B (Phone B - 機器人本體機載大腦)**：固定於機器人背部的手機，運行 `chica-server` 原生 Android 應用程式。負責感測器姿態採集、ONNX 神經網路推論、幾何步態融合，並透過 USB 序列埠驅動 18 顆伺服舵機。
 
-#### 1. 執行完整回歸測試 (Unit + Integration + Full-Loop Simulation, 41 項測試):
+### 【English】Architecture Summary
+- **Phone A (Pilot Controller)**: Handheld phone or PC browser used by the operator. Loads the landscape tactical HUD with dual virtual touch joysticks and live telemetry.
+- **Pilot Relay Server**: Runs on a PC or edge gateway, providing HTTP hosting, WebSocket command forwarding, and a 350 ms Deadman watchdog cutoff.
+- **Phone B (Onboard Robot Brain)**: Mounted on the robot, running the `chica-server` Android APK. Assembles the 67-dim observation vector, executes ONNX neural inference, blends tripod kinematics, and drives 18 servos via USB serial.
+
+---
+
+## 2. 手機 B：機載伺服器畫面詳解 / Phone B: Onboard Server Screen Breakdown
+
+當在手機 B 上開啟 `chica-server` App 時，螢幕會鎖定於沉浸式全螢幕（Immersive Mode）高對比儀表介面：
+
+| 區域 (Region) | 元件 / 標籤 (Element) | 視覺呈現與數值 (Visual Display) | 功能說明 (Description - zh-TW) | Description (en) |
+| :--- | :--- | :--- | :--- | :--- |
+| **頂部工具列**<br>*(Top Bar)* | `Camera` | 按鈕 (灰色/反白) | 切換 Android 機載鏡頭預覽畫面。 | Toggles onboard camera preview stream. |
+| | `Policy` | 按鈕 | 呼叫系統瀏覽器開啟專案隱私條款。 | Opens project privacy policy in browser. |
+| | `Config` | 按鈕 | 彈出文字對話框，可直接手動檢視與儲存 `config-2040.txt` 舵機校準與引腳映射。 | Pops up text dialog to inspect/edit `config-2040.txt` calibrations. |
+| **中央儀表區**<br>*(Center HUD)* | `V:` (電壓) | 綠色/黃色/紅色浮點數<br>(未連接顯示 `---`) | 2S 鋰電池即時電壓 (6.0V~8.4V)。低於 6.4V 轉黃色預警，低於 6.0V 轉紅色危險。 | Real-time 2S LiPo voltage. Turns yellow (<6.4V) and red (<6.0V). |
+| | `I:` (電流) | 浮點數 (安培 A) | 18 通道總負載電流。過載 (>8A/10A) 會發出蜂鳴警報。 | Total load current. Alerts trigger on overcurrent (>8A/10A). |
+| | `BPS:` (頻率) | 整數 (Bytes/sec) | 序列埠通訊速率。連線健康 (>100 BPS) 呈綠色，異常呈紅色。 | Serial communication rate. Green (>100 BPS), red on stall. |
+| | `IP:` (位址) | IPv4 位址文字 | 手機 B 當前的區域網路 IP，供中繼端與控制器連線。 | Current LAN IP address of Phone B for pairing. |
+| | **足端著地塊**<br>*(Touch Blocks)* | 左側 3 方塊 (L1~L3)<br>右側 3 方塊 (R1~R3) | 著地 (Stance) 顯示紅色，騰空 (Swing) 顯示黑色。動態呈現三角步態交替。 | Visualizes foot contacts: Red = Stance (grounded), Black = Swing (airborne). |
+| | **告警標誌**<br>*(Warnings)* | 紅底黃字 `[V]` / `[I]` 方塊 | 當電壓過低或電流堵轉時跳出的緊急警告圖示。 | Flashing warning icons during undervoltage or overcurrent stall. |
+| | **搖桿反饋面板**<br>*(Joystick Panels)* | 底部雙黑色方框與十字軸 | 左框綠點/青點顯示姿態向量；右框綠點/藍點顯示當前行進速度與偏航角速度。 | Dual crosshair plots illustrating translation and yaw velocity inputs. |
+| **底部控制列**<br>*(Bottom Bar)* | `Block` | 按鈕 (啟用時青色) | 鎖定/解鎖步態輸出迴圈。 | Locks/unlocks gait generation loop. |
+| | `Torque` | 按鈕 (啟用時青色) | 實體 Servo 2040 Relay 繼電器開關 (P0 引腳)。青色表示舵機已通電。 | Controls hardware power relay (P0). Cyan indicates servos powered. |
+| | `Exit` | 按鈕 | 安全切斷動力並結束 App 進程。 | Safely cuts power and exits application. |
+
+---
+
+## 3. 手機 A：戰術 Web 遙控 HUD 畫面詳解 / Phone A: Tactical Web Pilot HUD Breakdown
+
+由操作者手持手機 A，瀏覽器進入 `http://<IP>:8080` 呈現之橫向操縱介面：
+
+### 3.1 頂部戰術狀態欄 (Tactical Header)
+- **連線燈號 (Status Badges)**:
+  - `ROBOT: ONLINE / OFFLINE`: 機載手機 B TCP 18711 連線狀態。
+  - `LINK: CONNECTED / DISCONNECTED`: 瀏覽器與 PilotServer WebSocket (8081) 鏈路狀態。
+- **步態模式切換籤 (Gait Selectors)**:
+  - `[🧠 ONNX AI Gait]`: 綠色高亮，啟用 18-DOF 強化學習殘差步態。
+  - `[📐 Analytical Tripod Gait]`: 幾何三角解析步態。
+- **快控動作鍵 (Tactical Actions)**:
+  - `⚡ RELAY`: 遙控開關舵機供電繼電器。
+  - `🦿 STAND / SIT`: 切換待命站立姿態與收腿蹲坐休眠姿態。
+  - `🛑 E-STOP`: 最高優先級急停鈕（切斷電機並煞車）。
+
+### 3.2 中央儀表板 (HUD Dashboard)
+1. **🔋 電池電壓卡 (Battery Voltage Card)**:
+   - 顯示即時總電壓、百分比進度條與單芯平均估算電壓 (`~3.8V / cell`)。
+   - 具備 `NORMAL`、`LOW WARN` (6.4V)、`CUTOFF` (6.0V) 狀態標籤。
+2. **🕷️ 六足踩踏拓撲 (Leg Contact Matrix)**:
+   - 俯視圖呈現 L1~L3 與 R1~R3 的接地感應器狀態（`DOWN` 綠色 vs `AIR` 灰色）。
+   - 顯示通訊更新頻率 (`BPS`)。
+3. **⚡ 負載電流卡 (Total Current Card)**:
+   - 顯示即時安培數，區分 `IDLE` (<1.5A)、`WALKING` (1.5~8.0A) 與 `OVERLOAD` (>8.0A) 警告。
+
+### 3.3 輔助開關與倍率調整 (Auxiliary Controls Bar)
+- **`CRAB MODE`**: 開啟橫向平移（解鎖左搖桿 X 軸橫著走）。
+- **`HIGH CLEARANCE`**: 高底盤避障模式（機身抬高以跨越碎石障礙）。
+- **`CALIBRATE`**: 六足觸地感測器基準值重新歸零。
+- **`SPEED GAIN`**: `0.5x ~ 1.5x` 類比滑桿，微調前進與旋轉靈敏度。
+
+### 3.4 雙虛擬觸控搖桿 (Dual Virtual Joysticks)
+- **左搖桿 (Left Stick - 平移向量)**:
+  - 向上/下推：控制前進/後退速度 ($v_x \in [-0.35, +0.35]\text{ m/s} \times \text{Gain}$)。
+  - 向左/右推 (開啟 Crab)：控制側向橫移速度 ($v_y \in [-0.20, +0.20]\text{ m/s} \times \text{Gain}$)。
+- **中央 Deadman 安全開關 (Deadman Switch Box)**:
+  - 只要雙手離開搖桿，系統在 50 ms 內發送 `stop` (`walkclear`)，機器人即刻四平八穩立定煞車。
+- **右搖桿 (Right Stick - 轉向角速度)**:
+  - 向左/右推：原地逆時針/順時針旋轉角速度 ($\omega_z \in [-0.65, +0.65]\text{ rad/s} \times \text{Gain}$)。
+
+---
+
+## 4. 步態模式與切換指南 / Locomotion Modes & Switching Guide
+
+### 4.1 名稱定義對照 (Terminology Mapping)
+
+| 概念分類 | 專案正式術語 | 使用者口語稱呼 | 運算架構與特點 |
+| :--- | :--- | :--- | :--- |
+| **AI 神經網路模式** | **ONNX AI Gait**<br>*(或 ONNX Locomotion)* | ONNX 行走模式 | • 67 維狀態輸入（IMU、姿態誤差、步態時鐘）<br>• `hexapod_policy.onnx` 推論 18 維殘差動作<br>• 自動依據地形調節落足點與減震 |
+| **傳統預編程模式** | **Analytical Tripod Gait**<br>*(三角解析步態)* | Pre-programmed Mode<br>*(預先寫好的步態)* | • 純幾何正弦/擺線軌跡產生器<br>• 固定三角步頻 (1.0Hz / 1.5Hz / 2.0Hz / 2.5Hz)<br>• 結構簡單，平坦地面運算開銷極低 |
+
+> [!NOTE]
+> 使用者所稱呼的 **"pre-programmed mode"** 在六足機器人領域完全合適且通用！在程式碼中對應為傳統的幾何逆運動學三角步態（`Analytical Tripod Gait`）。
+
+### 4.2 三種層級切換方式 (Switching Methods)
+
+#### 方法 1：在 Web 遙控端介面一鍵點擊切換 (最推薦)
+在 Phone A 瀏覽器頂端模式欄：
+- 點擊 **`[🧠 ONNX AI Gait]`**：切換為神經網路殘差步態，自動發送 `onnx on`，後續行走傳送 `walkonnx:<turn>,<forward>,0`。
+- 點擊 **`[📐 Analytical Tripod Gait]`**：切換為傳統預編程步態，自動發送 `onnx off`，後續行走傳送 `walk2:<turn>,<forward>,0`。
+
+#### 方法 2：底層 TCP 通訊協定指令切換 (Port 18711)
+若透過 Python、ROS、或終端 Netcat 直連手機 B：
 ```bash
+# 切換為 ONNX AI 步態
+echo "onnx on" | nc <PHONE_B_IP> 18711
+# 或直接下發 ONNX 行走封包 (轉向率, 前進速度, 動畫索引)
+echo "walkonnx:0.0,0.5,0" | nc <PHONE_B_IP> 18711
+
+# 切換為傳統預編程步態 (關閉 ONNX)
+echo "onnx off" | nc <PHONE_B_IP> 18711
+# 或下發標準三角行走封包 (walk2 表示標準 2.0Hz 三角步態)
+echo "walk2:0.0,0.5,0" | nc <PHONE_B_IP> 18711
+```
+
+#### 方法 3：PC 端的 MuJoCo 數位孿生工作台 (`demo.py`)
+在電腦上運行 MuJoCo 模擬器時：
+- 按下鍵盤 **`M`** 鍵：在 **ONNX 強化學習殘差步態** 與 **傳統幾何三角步態** 之間即時 Toggle 切換。
+- 終端將顯示：`[MODE] Switched to ONNX Policy Gait` 或 `[MODE] Switched to Kinematic Tripod Gait`。
+
+---
+
+## 5. 無實體機虛擬閉環驗證指南 / Hardware-Free Simulation & Verification Guide
+
+本專案具備完整的**硬體級軟體模擬器 (Software-in-the-Loop)**，即使沒有實體機器人，也能在電腦上體驗 100% 完整的遙控、畫面與步態交替行為！
+
+### 步驟 1：啟動中繼伺服器與虛擬舵機閉環模擬
+打開命令提示字元 (PowerShell / Terminal)，執行：
+```powershell
+# 啟動 PilotServer (包含 Web 服務與動態虛擬遙測，--mock 或 --mock-telemetry 均可)
+python MakeYourPet-DigitalTwin-Server/pilot_server.py --mock
+```
+伺服器將在 `8080` (HTTP) 與 `8081` (WebSocket) 啟動監聽。
+
+### 步驟 2：打開瀏覽器體驗戰術駕駛艙
+1. 在瀏覽器打開：`http://localhost:8080`
+2. 將瀏覽器視窗拉為**橫向寬螢幕**。
+3. 您將看到：
+   - 頂部狀態顯示 `ROBOT: ONLINE` 與 `LINK: CONNECTED`。
+   - 電池電壓即時顯示 `~7.40V`。
+   - 用滑鼠按住拖動**左側虛擬搖桿**：
+     - 中間的六足矩陣會開始規律交替顯示 `DOWN` 與 `AIR`（模擬三角步態踩踏）。
+     - 放開滑鼠：中央 Deadman Switch 立即觸發 `STOP (WALKCLEAR)`。
+   - 點擊頂部的 **`[🧠 ONNX AI Gait]`** 與 **`[📐 Analytical Tripod Gait]`**，觀察指令流由 `walkonnx:` 與 `walk2:` 無縫切換！
+
+### 步驟 3：執行全系統 8 階段自動化閉環回歸測試
+驗證整個通訊鏈路、數值邊界、安全看門狗與 ONNX 矩陣是否完好：
+```powershell
 python MakeYourPet-DigitalTwin-Server/tools/run_regression_tests.py --all
 ```
+測試涵蓋：
+- 41 項單元與整合測試
+- 8 階段虛擬閉環模擬（連線、ONNX 行走、三角步態、Deadman 急停、過流防護等），全部通過即代表全系統運作正常！
 
-#### 2. 快速單元與安全不變量測試 (僅需 ~2 秒，適合提交前快速驗證):
-```bash
-python MakeYourPet-DigitalTwin-Server/tools/run_regression_tests.py --unit
-```
+---
 
-#### 3. 執行 Python 標準 `unittest` Discovery (CI/CD 相容):
-```bash
-python -m unittest discover -s MakeYourPet-DigitalTwin-Server/tests
-```
+## 6. 常見問題與避坑手冊 / FAQ & Troubleshooting
 
-#### 4. 執行 8 階段全鏈路虛擬閉環模擬測試:
-```bash
-python MakeYourPet-DigitalTwin-Server/tools/test_full_loop_simulation.py
-```
+### Q1: 手機 B 上安裝 App 後，電壓電流都顯示 `---` 是正常的嗎？
+**答**：完全正常！如果手機尚未透過 USB-OTG 連接至 Pimoroni Servo 2040 實體板，或者尚未啟動虛擬模擬器，ADC 感測器讀取不到封包，系統會安全地顯示 `---`。一旦連線成功，即會即時更新。
 
-### 4.2 測試階段涵蓋範圍 (Full-Loop Simulation Phases)
+### Q2: 實體機行走時，ONNX 步態與三角步態有何體感差異？
+- **Analytical Tripod (幾何預編程)**：步頻規律，像鐘擺一樣精確固定；在極平整桌面表現優異，但若遇到 1~2 公分凸起或斜坡容易打滑卡住。
+- **ONNX AI Gait**：具備動態自適應性，遇到障礙物或阻力時，關節會根據 IMU 姿態回饋動態微調抬腿高度與落地柔順度，行進更具仿生感。
 
-1. **Phase 1: WebSocket 握手與遙測連結校驗** (`robotConnected: true`, 電壓、電流與 BPS)。
-2. **Phase 2: 電源繼電器與姿態切換測試** (`torque` 繼電器通電, `sit` / `stand` 姿態切換)。
-3. **Phase 3: 前進方向 ONNX 步態推論** ($v_x > 0$, 殘差融合 $q = q_{\text{ref}} + 0.15\Delta q$, 實時負載電流提升至 $>1.5\text{A}$)。
-4. **Phase 4: 原地偏航旋轉測試** ($\omega_z > 0$, 左右兩側腿呈相反相位擺動)。
-5. **Phase 5: 後退方向步態推論** ($v_x < 0$)。
-6. **Phase 6: 經典三角步態模式動態切換** (`walk2:` 指令轉發相容性)。
-7. **Phase 7: 安全看門狗 (Deadman Switch) 超時急停測試** (中斷搖桿串流 $>350\text{ms}$，系統自動觸發 `walkclear` 剎車)。
-8. **Phase 8: 主動急停與待機電流復原校驗** (確認電流回落至待機安全值，18 通道虛擬 Servo2040 PWM 脈寬 100% 位於 $[700, 2300]\ \mu s$ 安全包絡內)。
-
+### Q3: Deadman Switch 放手後，機器人會瞬間趴下嗎？
+**不會**。專案已實作「軟平滑減速停步」（Soft Deceleration Decay）：當放手觸發 `walkclear` 時，殘差動作以 $0.85\times$ 逐幀衰減並套用 EMA 濾波，懸空的腿會在 150 ms 內溫和踏回地面，保持穩健的六足立定姿態。

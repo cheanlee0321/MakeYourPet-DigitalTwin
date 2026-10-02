@@ -462,7 +462,7 @@ def main():
     parser.add_argument("--ws-port", type=int, default=DEFAULT_WS_PORT, help="Control WebSocket port (default: 8081)")
     parser.add_argument("--chica-host", type=str, default=DEFAULT_CHICA_HOST, help="Phone B (Chica) IP address (default: 127.0.0.1)")
     parser.add_argument("--chica-port", type=int, default=DEFAULT_CHICA_PORT, help="Phone B (Chica) TCP port (default: 18711)")
-    parser.add_argument("--mock", action="store_true", help="Enable mock telemetry mode (test UI without robot)")
+    parser.add_argument("--mock", "--mock-telemetry", dest="mock", action="store_true", help="Enable mock telemetry mode (test UI without robot)")
     args = parser.parse_args()
 
     web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pilot_web")
